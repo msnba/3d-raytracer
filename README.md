@@ -1,8 +1,6 @@
-# cpp-engine
+# 3d-renderer
 
-_A lightweight, open source C++ graphics engine._
-
-(The name is to be determined)
+_A simple C++ 3d renderer using OpenGL._
 
 ### Prerequisites
 
@@ -14,7 +12,7 @@ _A lightweight, open source C++ graphics engine._
 ### Building 🔨
 
 1. Clone the repo:
-   - `git clone https://github.com/msnba/cpp-engine.git`
+   - `git clone https://github.com/msnba/3d-renderer.git`
 2. CD into the new directory:
    - `cd ./cpp-engine`
 3. Install dependencies (make sure vcpkg is added to PATH):
