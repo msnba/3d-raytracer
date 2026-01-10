@@ -10,7 +10,7 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 
-add_executable(engine bin/main.cpp)
+add_executable(engine bin/main.cpp bin/shader.cpp)
 
 target_link_libraries(engine PRIVATE
     glfw
