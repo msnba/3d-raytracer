@@ -2,13 +2,13 @@
 
 Shader::Shader(const char *vertexPath, const char *fragmentPath, ShaderType type)
 {
-    const char *vShaderCode = vertexPath;
+    std::string vertexCode;
+    std::string fragmentCode;
+    const char *vShaderCode = vertexPath; // Assumes shader type source and redefines later
     const char *fShaderCode = fragmentPath;
     if (type == ShaderType::PATH)
     {
         // -- Read File --
-        std::string vertexCode;
-        std::string fragmentCode;
         std::ifstream vFile;
         std::ifstream fFile;
 
@@ -35,8 +35,13 @@ Shader::Shader(const char *vertexPath, const char *fragmentPath, ShaderType type
             std::cerr << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
         }
 
-        const char *vShaderCode = vertexCode.c_str();
-        const char *fShaderCode = fragmentCode.c_str();
+        vShaderCode = vertexCode.c_str();
+        fShaderCode = fragmentCode.c_str();
+    }
+
+    if (vertexCode.empty() || fragmentCode.empty())
+    {
+        std::cerr << "ERROR::SHADER::FILE_SOURCE_EMPTY\n";
     }
 
     // -- Compile Shaders --

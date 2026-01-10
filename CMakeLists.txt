@@ -9,11 +9,28 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
+find_package(Stb REQUIRED)
 
-add_executable(engine bin/main.cpp bin/shader.cpp)
+file(GLOB_RECURSE SRC_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+
+include_directories(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
+
+add_executable(engine ${SRC_SOURCES})
 
 target_link_libraries(engine PRIVATE
     glfw
     glm::glm
     glad::glad
+)
+
+add_custom_command(
+    TARGET engine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:engine>/assets"
 )
