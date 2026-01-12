@@ -1,6 +1,6 @@
 # 3d-renderer
 
-_A simple C++ 3D renderer using OpenGL._
+_A simple cross-platform C++ 3D Renderer using OpenGL_
 
 ### Prerequisites 📝
 
@@ -19,6 +19,7 @@ _A simple C++ 3D renderer using OpenGL._
    - `vcpkg integrate install`
 4. Configure project with CMake (automatically installs dependencies):
    - `cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -G "Ninja"`
+   - There may be packages missing in order to compile the dependencies listed in the output, so also install those.
 5. Build the project with CMake:
    - `cmake --build build`
 
