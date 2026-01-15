@@ -7,12 +7,28 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 
+#include "camera.h"
 #include "shader.h"
 #include "stb_image.h"
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
+void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void get_input(GLFWwindow *window);
 void createVB(unsigned int *VBO, unsigned int *VAO, float *vertices, size_t size);
+
+const unsigned int SCR_WIDTH = 800;
+const unsigned int SCR_HEIGHT = 600;
+
+Camera camera(75.0f, 5.0f);
+// mouse
+bool firstMouse = true;
+float yaw = -90.0f; // a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
+float pitch = 0.0f;
+float lastX = (float)SCR_WIDTH / 2.0;
+float lastY = (float)SCR_HEIGHT / 2.0;
+
+float deltaTime = 0.0f;
+float lastFrame = 0.0f;
 
 int main()
 {
@@ -28,7 +44,7 @@ int main()
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "Window", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Window", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to initialize Window\n";
@@ -37,6 +53,8 @@ int main()
     }
     glfwMakeContextCurrent(window);                                    // ! Window must be contextualized before GLAD initialization.
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback); // Resize callback.
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -119,8 +137,8 @@ int main()
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float))); // modified for texture coords
     glEnableVertexAttribArray(1);
 
-    // -- Texture --
-    unsigned int texture1, texture2;
+    // -- Image Texture --
+    unsigned int texture1;
     glGenTextures(1, &texture1);
     glBindTexture(GL_TEXTURE_2D, texture1);
 
@@ -156,15 +174,15 @@ int main()
 
         glUseProgram(shader.ID);
 
-        glm::mat4 view = glm::mat4(1.0f);
-        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+        // -- Transformations --
 
-        glm::mat4 projection;
-        projection = glm::perspective(glm::radians(60.0f), 800.0f / 600.0f, 0.1f, 100.0f);
+        float currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
 
-        shader.setMat4("view", view);
+        shader.setMat4("view", camera.getView());
 
-        shader.setMat4("projection", projection);
+        shader.setMat4("projection", camera.getProjection(SCR_WIDTH, SCR_HEIGHT));
 
         // render extra cubes
         glBindVertexArray(VAO);
@@ -172,8 +190,7 @@ int main()
         {
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, cubePositions[i]);
-            float angle = glfwGetTime() * 25.0f;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+            model = glm::rotate(model, glm::radians(0.0f), glm::vec3(1.0f, 0.3f, 0.5f));
             shader.setMat4("model", model);
 
             glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -196,10 +213,49 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     glViewport(0, 0, width, height);
 }
+void mouse_callback(GLFWwindow *window, double xposin, double yposin)
+{
+    float xpos = static_cast<float>(xposin);
+    float ypos = static_cast<float>(yposin);
+
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    lastX = xpos;
+    lastY = ypos;
+
+    float sensitivity = 0.1f; // change this value to your liking
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw += xoffset;
+    pitch += yoffset;
+
+    // make sure that when pitch is out of bounds, screen doesn't get flipped
+    if (pitch > 89.0f)
+        if (pitch > 89.0f)
+            pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    camera.cameraFront = glm::normalize(front);
+}
 void get_input(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    camera.getInput(window, deltaTime);
 }
 void createVB(unsigned int *VBO, unsigned int *VAO, float *vertices, size_t size) // unless i want to copy the entire array each time, need size
 {
