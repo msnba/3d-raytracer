@@ -2,6 +2,8 @@
 
 _A simple cross-platform C++ 3D Renderer using OpenGL_
 
+(No screenshots yet, **WIP**)
+
 ### Prerequisites 📝
 
 - [A C++ Compiler](https://code.visualstudio.com/docs/languages/cpp#_install-a-compiler)
