@@ -9,7 +9,7 @@
 class Camera
 {
 public:
-    float fov, speed;
+    float fov, speed, yaw, pitch;
     glm::vec3 cameraPos, cameraFront, cameraUp;
 
     Camera(float fov = 60.0f, float speed = 5.0f);
@@ -18,6 +18,8 @@ public:
 
     glm::mat4 getProjection(int SCR_WIDTH, int SCR_HEIGHT);
     glm::mat4 getView();
+
+    void normalize();
 };
 
 #endif
