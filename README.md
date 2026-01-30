@@ -4,6 +4,8 @@ _A simple cross-platform C++ 3D Renderer using OpenGL_
 
 (No screenshots yet, **WIP**)
 
+**NOTICE ⚠️: As one may notice through my earlier commits, they are modeled after the lovely [LearnOpenGL](https://learnopengl.com/) tutorials. This is mostly because I'm still learning and will get around to writing my own architecture after the course. Thank you for your understanding.**
+
 ### Prerequisites 📝
 
 - [A C++ Compiler](https://code.visualstudio.com/docs/languages/cpp#_install-a-compiler)
@@ -27,4 +29,5 @@ _A simple cross-platform C++ 3D Renderer using OpenGL_
 
 ## License
 
+e
 **[MIT](https://choosealicense.com/licenses/mit/)**

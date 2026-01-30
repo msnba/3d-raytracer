@@ -11,7 +11,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
-find_package(Stb REQUIRED)
 
 file(GLOB_RECURSE SRC_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"

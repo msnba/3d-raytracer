@@ -8,6 +8,15 @@ uniform vec3 lightColor;
 uniform vec3 lightPos;
 uniform vec3 viewPos;
 
+struct DirLight{
+    vec3 direction;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};
+uniform DirLight dirLight;
+
+
 void main()
 {
     vec3 ambient = 0.05f * lightColor;
