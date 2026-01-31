@@ -6,31 +6,38 @@ uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
 uniform vec2 resolution;
+uniform uint sphereCount;
+uniform uint maxBounce;
+uniform uint numRaysPerPixel;
 
 struct Ray {
     vec3 origin;
     vec3 direction;
 };
 
+struct Material {
+    vec4 color;
+    vec4 emission; //rgb + strength
+};
+
 struct Sphere {
     vec3 pos;
     float radius;
-    vec3 color;
-    float pad; // temp alignment so the Sphere reaches 32 bytes
+    Material material;
 };
 
 layout(std430, binding = 0) buffer Spheres { //for receiving spheres
     Sphere spheres[];
 };
 
-uniform int sphereCount;
+
 
 struct Collision {
     bool didHit;
     float distance;
     vec3 hitPoint;
     vec3 normal;
-    vec3 color;
+    Material material;
 };
 
 Collision raySphere(Ray ray, vec3 center, float radius){
@@ -58,8 +65,8 @@ Collision raySphere(Ray ray, vec3 center, float radius){
 Collision calculateRayCollision(Ray ray)
 {
     Collision closest;
-    closest.distance = 1e30; // very large distance
     closest.didHit = false;
+    closest.distance = 1e30; // very large distance as a default
 
     for(int i = 0; i < sphereCount; i++){
         Sphere s = spheres[i];
@@ -67,17 +74,58 @@ Collision calculateRayCollision(Ray ray)
 
         if(current.didHit && current.distance < closest.distance){
             closest = current;
-            closest.color = s.color;
+            closest.material = s.material;
         }
     }
 
     return closest;
 }
 
+// PCG rng
+float randomNormalDistribution(inout uint rng){
+    rng = rng * 747796405u + 2891336453u;
+    uint result = ((rng >> ((rng >> 28u) + 4u)) ^ rng) * 277803737u;
+    result = (result >> 22u) ^ result;
+
+    float u = float(result) / 4294967295.0;
+
+    // normal dist
+    float theta = 2 * 3.1415926 * u;
+    float rho = sqrt(-2 * log(u));
+    return rho * cos(theta);
+}
+
+//randomize ray bounce from an object, locked to the normal's hemisphere
+vec3 randomHemisphereDirection(vec3 normal, inout uint rng){
+    vec3 dir = normalize(vec3(randomNormalDistribution(rng), randomNormalDistribution(rng), randomNormalDistribution(rng)));
+    return dir * sign(dot(normal, dir)); //2d dot product
+}
+
+vec3 trace(Ray ray, inout uint rng){
+    vec3 incomingLight = vec3(0);
+    vec3 rayColor = vec3(1.0f);
+
+    for(int i=0;i <= maxBounce; i++){
+        Collision collision = calculateRayCollision(ray);
+        if(!collision.didHit){break;}
+        ray.origin = collision.hitPoint;
+        ray.direction = randomHemisphereDirection(collision.normal, rng);
+
+        incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
+        rayColor *= collision.material.color.rgb;
+    }
+
+    return incomingLight;
+}
+
 void main()
 {
-    vec2 ndc = TexCoords; // [0,1]
-    ndc.x *= resolution.x / resolution.y; // aspect correction
+    vec2 uv = TexCoords; // [0,1]
+    vec2 screen = uv - 0.5;
+    screen.x *= resolution.x / resolution.y; // aspect correction
+    uvec2 numPixels = uvec2(resolution);
+    uvec2 pixelCoord = uvec2(uv * vec2(numPixels));
+    uint rng = pixelCoord.y * numPixels.x + pixelCoord.x;
 
     vec3 forward = normalize(cameraFront);
     vec3 right   = normalize(cross(forward, cameraUp));
@@ -85,9 +133,22 @@ void main()
 
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(forward + ndc.x*right + ndc.y*up);
 
-    // FragColor = vec4(sphere(ray, vec3(0,0,-5), 1.0).didHit,float(sphere(ray, vec3(0,0,-5), 1.0).didHit) * .75f,float(sphere(ray, vec3(0,0,-5), 1.0).didHit) * .5f,1);
+    vec3 focusPoint =
+        cameraPos +
+        forward +
+        screen.x * right +
+        screen.y * up;
 
-    FragColor = vec4(calculateRayCollision(ray).color, 1);
+    ray.direction = normalize(focusPoint - ray.origin);
+
+    vec3 totalLight = vec3(0);
+
+    for(int i = 0; i < numRaysPerPixel; i++){
+        totalLight += trace(ray, rng);
+    }
+
+    totalLight /= numRaysPerPixel; //average
+
+    FragColor = vec4(totalLight, 1);
 }

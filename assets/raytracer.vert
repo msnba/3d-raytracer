@@ -6,6 +6,6 @@ out vec2 TexCoords;
 void main()
 {
     //passthrough for frag shader
-    TexCoords = aPos;
+    TexCoords = aPos * 0.5 + 0.5; // [-1,1] -> [0,1] map
     gl_Position = vec4(aPos, 0.0, 1.0);
 }

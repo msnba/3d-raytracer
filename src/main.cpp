@@ -25,6 +25,7 @@ Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
 
 int main()
 {
+    // -- Settings --
     glfwSetCursorPosCallback(window.window, mouseInput);
     glfwSetInputMode(window.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -32,9 +33,9 @@ int main()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_DEPTH_TEST);
 
+    // -- Pixel Shader --
     Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
 
-    // -- Quad Buffer --
     // ! THIS WILL BE REPLACED BY A COMPUTE SHADER LATER
     float quad[] = {// using a quad so fragment shader runs over every pixel on the screen
                     -1.f, -1.f,
@@ -44,7 +45,6 @@ int main()
                     1.f, -1.f,
                     1.f, 1.f};
 
-    // super simple vertex buffer for a quad over the screen
     unsigned int VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -57,16 +57,22 @@ int main()
     glEnableVertexAttribArray(0);
 
     // -- Object Instantiation --
+    struct MaterialGPU
+    {
+        glm::vec4 color;
+        glm::vec4 emission; // rgb+strength
+    };
     struct SphereGPU
     {
-        glm::vec3 pos;   // 12 bytes
-        float radius;    // 4
-        glm::vec3 color; // 12
-        float pad;       // 4 (for 32 bytes total)
+        glm::vec3 pos; // 12 bytes
+        float radius;  // 4
+        MaterialGPU material;
     };
     std::vector<SphereGPU> spheres = {
-        {{0.f, 0.f, -5.f}, 1.0f, {1.f, 0.f, 0.f}, 0.f},
-        {{2.f, 0.f, -6.f}, 1.0f, {0.f, 1.f, 0.f}, 0.f}};
+        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
+        {{5.0f, 0.5f, -8.f}, 1.0f, {{0.f, 1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
+        {{2.f, -15.0f, -10.f}, 15.0f, {{0.6f, 0.25f, 0.75f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
+        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f, 0.f}, {1.f, 1.f, 1.f, 10.f}}}};
 
     GLuint sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
@@ -93,15 +99,17 @@ int main()
 
         glUseProgram(raytracer.ID);
 
-        glUniform1i(
+        glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
-            static_cast<int>(spheres.size()));
+            static_cast<u_int>(spheres.size()));
 
         raytracer.setVec3("cameraPos", camera.cameraPos);
         raytracer.setVec3("cameraFront", camera.cameraFront);
         raytracer.setVec3("cameraUp", camera.cameraUp);
         raytracer.setFloat("fov", camera.fov);
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
+        glUniform1ui(glGetUniformLocation(raytracer.ID, "maxBounce"), 30);
+        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 100);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
