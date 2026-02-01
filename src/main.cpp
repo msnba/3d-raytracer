@@ -88,10 +88,10 @@ int main()
         MaterialGPU material;
     };
     std::vector<SphereGPU> spheres = {
-        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{5.0f, 0.5f, -8.f}, 1.0f, {{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{2.f, -15.0f, -10.f}, 15.0f, {{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}}}};
+        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{5.0f, 0.5f, -8.f}, 1.0f, {{1.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{2.f, -15.0f, -10.f}, 15.0f, {{1.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 0.f, 5.f}}}};
 
     GLuint sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
@@ -142,7 +142,7 @@ int main()
 
     while (!glfwWindowShouldClose(window.window))
     {
-        float currentFrame = glfwGetTime();
+        float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
@@ -172,7 +172,7 @@ int main()
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
-            static_cast<u_int>(spheres.size()));
+            static_cast<int>(spheres.size()));
 
         raytracer.setVec3("cameraPos", camera.cameraPos);
         raytracer.setVec3("cameraFront", camera.cameraFront);
@@ -208,13 +208,13 @@ int main()
     return 0;
 }
 
-float lastX = (float)SCR_WIDTH / 2.0;
-float lastY = (float)SCR_HEIGHT / 2.0;
+float lastX = static_cast<float>(SCR_WIDTH) / 2.0;
+float lastY = static_cast<float>(SCR_HEIGHT) / 2.0;
 
-void mouseInput(GLFWwindow *window, double xpos, double ypos)
+void mouseInput(GLFWwindow *window, double xposd, double yposd)
 {
-    xpos = static_cast<float>(xpos);
-    ypos = static_cast<float>(ypos);
+    float xpos = static_cast<float>(xposd);
+    float ypos = static_cast<float>(yposd);
 
     float xoffset = xpos - lastX;
     float yoffset = lastY - ypos; // y coords go from bottom to top
