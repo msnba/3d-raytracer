@@ -1,4 +1,4 @@
-# 3d-renderer
+# 3D-Raytracer
 
 _A simple cross-platform C++ 3D Raytracer using OpenGL_
 
