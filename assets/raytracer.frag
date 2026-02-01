@@ -10,13 +10,17 @@ uniform uint sphereCount;
 uniform uint maxBounce;
 uniform uint numRaysPerPixel;
 
+uniform sampler2D previousFrame; //for frame accumulation
+uniform uint frameIndex;
+
 struct Ray {
     vec3 origin;
     vec3 direction;
 };
 
 struct Material {
-    vec4 color;
+    vec3 color;
+    float smoothness;
     vec4 emission; //rgb + strength
 };
 
@@ -109,10 +113,12 @@ vec3 trace(Ray ray, inout uint rng){
         Collision collision = calculateRayCollision(ray);
         if(!collision.didHit){break;}
         ray.origin = collision.hitPoint;
-        ray.direction = randomHemisphereDirection(collision.normal, rng);
+        vec3 diffuseDir = randomHemisphereDirection(collision.normal, rng);
+        vec3 specularDir = reflect(ray.direction, collision.normal);
+        ray.direction = mix(diffuseDir, specularDir, collision.material.smoothness);
 
         incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
-        rayColor *= collision.material.color.rgb;
+        rayColor *= collision.material.color.rgb * dot(collision.normal, ray.direction) * 1.5; //lambert's cosine law
     }
 
     return incomingLight;
@@ -125,7 +131,8 @@ void main()
     screen.x *= resolution.x / resolution.y; // aspect correction
     uvec2 numPixels = uvec2(resolution);
     uvec2 pixelCoord = uvec2(uv * vec2(numPixels));
-    uint rng = pixelCoord.y * numPixels.x + pixelCoord.x;
+    uint rng = pixelCoord.y * numPixels.x + pixelCoord.x + frameIndex * 9781u;
+    // uint rng = pixelCoord.y * numPixels.x + pixelCoord.x;
 
     vec3 forward = normalize(cameraFront);
     vec3 right   = normalize(cross(forward, cameraUp));
@@ -150,5 +157,10 @@ void main()
 
     totalLight /= numRaysPerPixel; //average
 
-    FragColor = vec4(totalLight, 1);
+    float effectiveFrame = min(float(frameIndex), 150.0); //puts a ceiling on the amount of accumulated frames
+
+    vec3 prev = texture(previousFrame, uv).rgb;
+    float weight = 1.0/(effectiveFrame+1);
+
+    FragColor = vec4(mix(prev, totalLight, weight), 1.0f);
 }

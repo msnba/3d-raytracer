@@ -13,6 +13,7 @@
 
 void mouseInput(GLFWwindow *window, double xpos, double ypos);
 void getInput(GLFWwindow *window);
+void resetAccumulation();
 
 const unsigned int SCR_WIDTH = 1440;
 const unsigned int SCR_HEIGHT = 1080;
@@ -21,7 +22,26 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
 Camera camera(90.0f, 6.0f); // fov, speed
+bool cameraDirty = true;    // dictates when the frame clears so there isn't smudging
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
+uint32_t frameIndex = 0;
+
+GLuint *gAccumFBO = nullptr;
+
+void resetAccumulation()
+{
+    frameIndex = 0;
+
+    if (!gAccumFBO)
+        return;
+
+    for (int i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, gAccumFBO[i]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
 
 int main()
 {
@@ -29,9 +49,7 @@ int main()
     glfwSetCursorPosCallback(window.window, mouseInput);
     glfwSetInputMode(window.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
 
     // -- Pixel Shader --
     Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
@@ -59,7 +77,8 @@ int main()
     // -- Object Instantiation --
     struct MaterialGPU
     {
-        glm::vec4 color;
+        glm::vec3 color;
+        float smoothness;
         glm::vec4 emission; // rgb+strength
     };
     struct SphereGPU
@@ -69,10 +88,10 @@ int main()
         MaterialGPU material;
     };
     std::vector<SphereGPU> spheres = {
-        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
-        {{5.0f, 0.5f, -8.f}, 1.0f, {{0.f, 1.f, 0.f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
-        {{2.f, -15.0f, -10.f}, 15.0f, {{0.6f, 0.25f, 0.75f, 1.f}, {0.f, 0.f, 0.f, 0.f}}},
-        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f, 0.f}, {1.f, 1.f, 1.f, 10.f}}}};
+        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{5.0f, 0.5f, -8.f}, 1.0f, {{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{2.f, -15.0f, -10.f}, 15.0f, {{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
+        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}}}};
 
     GLuint sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
@@ -84,7 +103,42 @@ int main()
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO);
 
+    GLuint accumTex[2];
+    GLuint accumFBO[2]; // swapping frame buffers to pass past frame into fragment shader for averaging
+    glGenTextures(2, accumTex);
+    glGenFramebuffers(2, accumFBO);
+
+    for (int i = 0; i < 2; i++)
+    {
+        glBindTexture(GL_TEXTURE_2D, accumTex[i]);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA16F,
+            SCR_WIDTH,
+            SCR_HEIGHT,
+            0,
+            GL_RGBA,
+            GL_FLOAT,
+            nullptr);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[i]);
+        glFramebufferTexture2D(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D,
+            accumTex[i],
+            0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    gAccumFBO = accumFBO;
+
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    int ping = 0;
 
     while (!glfwWindowShouldClose(window.window))
     {
@@ -94,10 +148,27 @@ int main()
 
         getInput(window.window);
 
+        if (cameraDirty)
+        {
+            resetAccumulation();
+            cameraDirty = false;
+        }
+
         // start draw
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        int pong = 1 - ping; // effectively flips frame buffers
+        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[ping]);
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(raytracer.ID);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, accumTex[pong]);
+        glUniform1i(glGetUniformLocation(raytracer.ID, "previousFrame"), 0);
+
+        glUniform1ui(
+            glGetUniformLocation(raytracer.ID, "frameIndex"),
+            frameIndex);
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
@@ -109,10 +180,22 @@ int main()
         raytracer.setFloat("fov", camera.fov);
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
         glUniform1ui(glGetUniformLocation(raytracer.ID, "maxBounce"), 30);
-        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 100);
+        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 25);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, accumFBO[ping]);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+        glBlitFramebuffer( // copies previous frem buffer to another
+            0, 0, SCR_WIDTH, SCR_HEIGHT,
+            0, 0, SCR_WIDTH, SCR_HEIGHT,
+            GL_COLOR_BUFFER_BIT,
+            GL_NEAREST);
+
+        ping = pong;
+        frameIndex++; // * Comment out to disable accumulation
 
         glfwSwapBuffers(window.window);
         glfwPollEvents();
@@ -153,11 +236,25 @@ void mouseInput(GLFWwindow *window, double xpos, double ypos)
         camera.pitch = -89.0f;
 
     camera.normalize();
+
+    if (xoffset != 0.0f || yoffset != 0.0f)
+        cameraDirty = true;
 }
 void getInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
+    glm::vec3 oldPos = camera.cameraPos;
+    float oldYaw = camera.yaw;
+    float oldPitch = camera.pitch;
+
     camera.getInput(window, deltaTime);
+
+    if (camera.cameraPos != oldPos ||
+        camera.yaw != oldYaw ||
+        camera.pitch != oldPitch)
+    {
+        cameraDirty = true;
+    }
 }
