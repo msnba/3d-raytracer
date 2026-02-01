@@ -10,7 +10,8 @@ uniform uint sphereCount;
 uniform uint maxBounce;
 uniform uint numRaysPerPixel;
 
-uniform sampler2D previousFrame; //for frame accumulation
+// frame accumulation
+uniform sampler2D previousFrame;
 uniform uint frameIndex;
 
 struct Ray {
@@ -24,17 +25,38 @@ struct Material {
     vec4 emission; //rgb + strength
 };
 
+struct Triangle {
+    vec4 a, b, c;
+    vec4 n0, n1, n2;
+};
+
+struct Mesh {
+    uint firstTriangle;
+    uint triangleCount;
+    uint materialIdx;
+};
+
 struct Sphere {
     vec3 pos;
     float radius;
     Material material;
 };
 
-layout(std430, binding = 0) buffer Spheres { //for receiving spheres
+layout(std430, binding = 0) buffer Spheres {
     Sphere spheres[];
 };
 
+layout(std430, binding = 1) buffer Materials {
+    Material materials[];
+};
 
+layout(std430, binding = 2) buffer Triangles {
+    Triangle triangles[];
+};
+
+layout(std430, binding = 3) buffer Meshes {
+    Mesh meshes[];
+};
 
 struct Collision {
     bool didHit;
@@ -66,6 +88,32 @@ Collision raySphere(Ray ray, vec3 center, float radius){
     return collision;
 }
 
+// Moller-Trumbore algorithm
+// https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
+// adapted by https://stackoverflow.com/a/42752998
+Collision rayTriangle(Ray ray, Triangle tri, Material mat){
+    vec3 edge1 = tri.b.xyz - tri.a.xyz;
+    vec3 edge2 = tri.c.xyz - tri.a.xyz;
+    vec3 normalVec = cross(edge1, edge2);
+    float det = -dot(ray.direction, normalVec);
+    float invdet = 1.0f/det;
+    vec3 ao = ray.origin - tri.a.xyz;
+    vec3 dao = cross(ao, ray.direction);
+    float u = dot(edge2, dao) * invdet;
+    float v = -dot(edge1, dao) * invdet;
+    float dist = dot(ao, normalVec) * invdet;
+    float w = 1 - u - v;
+
+    Collision c;
+    c.didHit = det>=1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0;
+    c.hitPoint = ray.origin + ray.direction * dist;
+    c.normal = normalize(normalVec);
+    c.distance = dist;
+    c.material = mat;
+
+    return c;
+}
+
 Collision calculateRayCollision(Ray ray)
 {
     Collision closest;
@@ -79,6 +127,19 @@ Collision calculateRayCollision(Ray ray)
         if(current.didHit && current.distance < closest.distance){
             closest = current;
             closest.material = s.material;
+        }
+    }
+
+    for(int i=0; i < meshes.length(); i++){
+        Mesh mesh = meshes[i];
+        for(uint j = mesh.firstTriangle; j < mesh.firstTriangle + mesh.triangleCount; j++){
+            Triangle tri = triangles[j];
+            Material mat = materials[mesh.materialIdx];
+
+            Collision current = rayTriangle(ray, tri, mat);
+            if(current.didHit && current.distance < closest.distance){
+                closest = current;
+            }
         }
     }
 
@@ -113,12 +174,16 @@ vec3 trace(Ray ray, inout uint rng){
         Collision collision = calculateRayCollision(ray);
         if(!collision.didHit){break;}
         ray.origin = collision.hitPoint;
-        vec3 diffuseDir = randomHemisphereDirection(collision.normal, rng);
+
+        // vec3 diffuseDir = randomHemisphereDirection(collision.normal, rng);
+        vec3 diffuseDir = normalize(randomHemisphereDirection(collision.normal, rng));
         vec3 specularDir = reflect(ray.direction, collision.normal);
         ray.direction = mix(diffuseDir, specularDir, collision.material.smoothness);
 
         incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
-        rayColor *= collision.material.color.rgb * dot(collision.normal, ray.direction) * 1.5; //lambert's cosine law
+
+        // rayColor *= collision.material.color.rgb * dot(collision.normal, ray.direction) * 1.5; //lambert's cosine law
+        rayColor *= collision.material.color.rgb;
     }
 
     return incomingLight;
@@ -158,6 +223,7 @@ void main()
     totalLight /= numRaysPerPixel; //average
 
     float effectiveFrame = min(float(frameIndex), 150.0); //puts a ceiling on the amount of accumulated frames
+    // effectiveFrame = frameIndex;
 
     vec3 prev = texture(previousFrame, uv).rgb;
     float weight = 1.0/(effectiveFrame+1);

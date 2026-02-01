@@ -23,6 +23,7 @@ float lastFrame = 0.0f;
 
 Camera camera(90.0f, 6.0f); // fov, speed
 bool cameraDirty = true;    // dictates when the frame clears so there isn't smudging
+
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
 uint32_t frameIndex = 0;
 
@@ -75,33 +76,63 @@ int main()
     glEnableVertexAttribArray(0);
 
     // -- Object Instantiation --
-    struct MaterialGPU
-    {
-        glm::vec3 color;
-        float smoothness;
-        glm::vec4 emission; // rgb+strength
-    };
-    struct SphereGPU
-    {
-        glm::vec3 pos; // 12 bytes
-        float radius;  // 4
-        MaterialGPU material;
-    };
-    std::vector<SphereGPU> spheres = {
-        {{2.f, 1.f, -9.f}, 1.0f, {{0.f, 0.75f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{5.0f, 0.5f, -8.f}, 1.0f, {{1.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{2.f, -15.0f, -10.f}, 15.0f, {{1.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}},
-        {{-20.f, 10.0f, 0.f}, 10.0f, {{0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 0.f, 5.f}}}};
+    Scene scene;
+
+    scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {1.f, 1.0f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 10.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
+    scene.spheres.push_back({{2.f, -5.0f, -30.f}, 15.0f, {0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
+
+    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{1.f, 1.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, scene.materials));
+
+    // -- SSBO's --
 
     GLuint sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        spheres.size() * sizeof(SphereGPU),
-        spheres.data(),
+        scene.spheres.size() * sizeof(GPUSphere),
+        scene.spheres.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO);
+
+    GLuint matSSBO;
+    glGenBuffers(1, &matSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        scene.materials.size() * sizeof(GPUMaterial),
+        scene.materials.data(),
+        GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO);
+
+    std::vector<GPUTriangle> triangles;
+    std::vector<GPUMesh> gpuMeshes;
+    convertToGPUMeshes(scene, triangles, gpuMeshes);
+
+    GLuint triSSBO;
+    glGenBuffers(1, &triSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        triangles.size() * sizeof(GPUTriangle),
+        triangles.data(),
+        GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO);
+
+    GLuint meshSSBO;
+    glGenBuffers(1, &meshSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, meshSSBO);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        gpuMeshes.size() * sizeof(GPUMesh),
+        gpuMeshes.data(),
+        GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, meshSSBO);
+
+    // -- Frame Accumulation --
 
     GLuint accumTex[2];
     GLuint accumFBO[2]; // swapping frame buffers to pass past frame into fragment shader for averaging
@@ -137,7 +168,6 @@ int main()
 
     gAccumFBO = accumFBO;
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     int ping = 0;
 
     while (!glfwWindowShouldClose(window.window))
@@ -172,7 +202,7 @@ int main()
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
-            static_cast<int>(spheres.size()));
+            static_cast<int>(scene.spheres.size()));
 
         raytracer.setVec3("cameraPos", camera.cameraPos);
         raytracer.setVec3("cameraFront", camera.cameraFront);

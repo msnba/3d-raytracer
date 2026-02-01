@@ -2,16 +2,20 @@
 
 _A simple cross-platform C++ 3D Raytracer using OpenGL_
 
-(No screenshots yet, **WIP**)
+## Screenshots
 
-### Prerequisites 📝
+<div align="center">
+  <img src="gh_assets/mirrortest.png" alt="Mirror Test w/ Spheres" width="45%">
+</div>
+
+## Prerequisites 📝
 
 - [A C++ Compiler](https://code.visualstudio.com/docs/languages/cpp#_install-a-compiler)
 - [CMake](https://cmake.org)
 - [vcpkg](https://vcpkg.io/en)
 - [Ninja](https://ninja-build.org/) (Or another build system, just switch up the configure cmd.)
 
-### Building 🔨
+## Building 🔨
 
 1. Clone the repo:
    - `git clone https://github.com/msnba/3d-renderer.git`
