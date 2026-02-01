@@ -1,10 +1,8 @@
 # 3d-renderer
 
-_A simple cross-platform C++ 3D Renderer using OpenGL_
+_A simple cross-platform C++ 3D Raytracer using OpenGL_
 
 (No screenshots yet, **WIP**)
-
-**NOTICE ⚠️: As one may notice through my earlier commits, they are modeled after the lovely [LearnOpenGL](https://learnopengl.com/) tutorials. This is mostly because I'm still learning and will get around to writing my own architecture after the course. Thank you for your understanding.**
 
 ### Prerequisites 📝
 
@@ -29,5 +27,4 @@ _A simple cross-platform C++ 3D Renderer using OpenGL_
 
 ## License
 
-e
 **[MIT](https://choosealicense.com/licenses/mit/)**
