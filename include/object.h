@@ -170,9 +170,9 @@ static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &out
         }
 
         outMeshes.push_back(GPUMesh{
-            .firstTriangle = static_cast<uint32_t>(triOffset),
-            .triangleCount = static_cast<uint32_t>(triangleCount),
-            .materialIdx = mesh.materialIdx});
+            static_cast<uint32_t>(triOffset),
+            static_cast<uint32_t>(triangleCount),
+            mesh.materialIdx});
 
         triOffset += triangleCount;
     }
