@@ -40,10 +40,33 @@ struct GPUSphere
     glm::vec4 emission;
 };
 
+struct Transform
+{
+    glm::vec3 position = glm::vec3(0);
+    glm::vec3 rotation = glm::vec3(0);
+    glm::vec3 scale = glm::vec3(1);
+
+    glm::mat4 getMatrix() const
+    {
+        glm::mat4 T = glm::translate(glm::mat4(1.0f), position);
+
+        glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), rotation.x, glm::vec3(1, 0, 0));
+        glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), rotation.y, glm::vec3(0, 1, 0));
+        glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), rotation.z, glm::vec3(0, 0, 1));
+
+        glm::mat4 R = Rx * Ry * Rz;
+
+        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
+
+        return T * R * S;
+    };
+};
+
 struct Mesh
 {
     std::vector<tinyobj::index_t> indices;
     const tinyobj::attrib_t *attrib;
+    Transform transform;
     uint32_t materialIdx;
 };
 
@@ -54,7 +77,7 @@ struct Scene
     std::vector<GPUSphere> spheres;
 };
 
-static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, std::vector<GPUMaterial> &materialPool) // mesh loader method
+static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &transform, std::vector<GPUMaterial> &materialPool) // mesh loader method
 {
     uint32_t materialIndex = static_cast<uint32_t>(materialPool.size());
     materialPool.push_back(mat);
@@ -93,7 +116,7 @@ static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, std::vecto
         }
     }
 
-    return Mesh{std::move(indices), attrib, materialIndex};
+    return Mesh{std::move(indices), attrib, transform, materialIndex};
 }
 
 static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes)
@@ -133,13 +156,16 @@ static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &out
             };
 
             GPUTriangle tri;
-            tri.v0 = glm::vec4(pos(i0), 1.0f);
-            tri.v1 = glm::vec4(pos(i1), 1.0f);
-            tri.v2 = glm::vec4(pos(i2), 1.0f);
+            glm::mat4 model = mesh.transform.getMatrix();
 
-            tri.n0 = glm::vec4(nrm(i0), 0.0f);
-            tri.n1 = glm::vec4(nrm(i1), 0.0f);
-            tri.n2 = glm::vec4(nrm(i2), 0.0f);
+            tri.v0 = model * glm::vec4(pos(i0), 1.0f);
+            tri.v1 = model * glm::vec4(pos(i1), 1.0f);
+            tri.v2 = model * glm::vec4(pos(i2), 1.0f);
+
+            glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
+            tri.n0 = glm::vec4(normalMatrix * nrm(i0), 0.0f);
+            tri.n1 = glm::vec4(normalMatrix * nrm(i1), 0.0f);
+            tri.n2 = glm::vec4(normalMatrix * nrm(i2), 0.0f);
             outTriangles.push_back(tri);
         }
 

@@ -84,7 +84,7 @@ int main()
     scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 10.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
     scene.spheres.push_back({{2.f, -5.0f, -30.f}, 15.0f, {0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
 
-    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{1.f, 1.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, scene.materials));
+    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.9f, {0.f, 0.f, 0.f, 0.f}}, Transform{{-5.f, 0.f, -10.f}}, scene.materials));
 
     // -- SSBO's --
 

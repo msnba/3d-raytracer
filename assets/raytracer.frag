@@ -223,7 +223,7 @@ void main()
     totalLight /= numRaysPerPixel; //average
 
     float effectiveFrame = min(float(frameIndex), 150.0); //puts a ceiling on the amount of accumulated frames
-    // effectiveFrame = frameIndex;
+    effectiveFrame = frameIndex;
 
     vec3 prev = texture(previousFrame, uv).rgb;
     float weight = 1.0/(effectiveFrame+1);
