@@ -23,16 +23,33 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     }
 
     glfwMakeContextCurrent(window); // ! Window must be contextualized before GLAD initialization.
+    glfwSwapInterval(1);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cerr << "Failed to initialize GLAD\n";
         return;
     }
+
+    // -- ImGUI --
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO &io = ImGui::GetIO();
+    (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 450");
 };
 
 Window::~Window()
 {
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
     glfwDestroyWindow(window);
     glfwTerminate();
 }

@@ -5,6 +5,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
+#include "imgui.h"
 
 #include "camera.h"
 #include "shader.h"
@@ -20,6 +21,7 @@ const unsigned int SCR_HEIGHT = 1080;
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
+float fps = 0.0f;
 
 Camera camera(90.0f, 6.0f); // fov, speed
 bool cameraDirty = true;    // dictates when the frame clears so there isn't smudging
@@ -79,7 +81,7 @@ int main()
     Scene scene;
 
     scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {1.f, 1.0f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
     scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
     scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 10.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
     scene.spheres.push_back({{2.f, -5.0f, -30.f}, 15.0f, {0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
@@ -172,9 +174,12 @@ int main()
 
     while (!glfwWindowShouldClose(window.window))
     {
+        glfwPollEvents();
+
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
+        fps = 1.0f / deltaTime;
 
         getInput(window.window);
 
@@ -184,8 +189,24 @@ int main()
             cameraDirty = false;
         }
 
+        // imgui stuff
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::Begin("Stats Panel", nullptr,
+                     ImGuiWindowFlags_NoResize |
+                         ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_AlwaysAutoResize |
+                         ImGuiWindowFlags_NoDecoration);
+
+        ImGui::Text("FPS: %.1f", fps);
+        ImGui::Text("DT: %.3f", deltaTime);
+        ImGui::End();
+
         // start draw
         int pong = 1 - ping; // effectively flips frame buffers
+        ImGui::Render();
         glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[ping]);
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -227,8 +248,9 @@ int main()
         ping = pong;
         frameIndex++; // * Comment out to disable accumulation
 
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         glfwSwapBuffers(window.window);
-        glfwPollEvents();
     }
 
     glDeleteVertexArrays(1, &VAO);
