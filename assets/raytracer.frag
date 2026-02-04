@@ -1,4 +1,4 @@
-#version 450 core
+#version 430 core
 out vec4 FragColor;
 in vec2 TexCoords;
 
@@ -146,13 +146,17 @@ Collision calculateRayCollision(Ray ray)
     return closest;
 }
 
-// PCG rng
-float randomNormalDistribution(inout uint rng){
+float randomFloat(inout uint rng){
     rng = rng * 747796405u + 2891336453u;
     uint result = ((rng >> ((rng >> 28u) + 4u)) ^ rng) * 277803737u;
     result = (result >> 22u) ^ result;
 
-    float u = float(result) / 4294967295.0;
+    return float(result) / 4294967295.0;
+}
+
+// PCG rng
+float randomNormalDistribution(inout uint rng){
+    float u = randomFloat(rng);
 
     // normal dist
     float theta = 2 * 3.1415926 * u;
@@ -175,14 +179,12 @@ vec3 trace(Ray ray, inout uint rng){
         if(!collision.didHit){break;}
         ray.origin = collision.hitPoint;
 
-        // vec3 diffuseDir = randomHemisphereDirection(collision.normal, rng);
-        vec3 diffuseDir = normalize(randomHemisphereDirection(collision.normal, rng));
+        vec3 diffuseDir = randomHemisphereDirection(collision.normal, rng);
         vec3 specularDir = reflect(ray.direction, collision.normal);
-        ray.direction = mix(diffuseDir, specularDir, collision.material.smoothness);
 
+        ray.direction = normalize(mix(diffuseDir, specularDir, collision.material.smoothness));
         incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
 
-        // rayColor *= collision.material.color.rgb * dot(collision.normal, ray.direction) * 1.5; //lambert's cosine law
         rayColor *= collision.material.color.rgb;
     }
 
@@ -205,28 +207,23 @@ void main()
 
     Ray ray;
     ray.origin = cameraPos;
-
     vec3 focusPoint =
         cameraPos +
         forward +
         screen.x * right +
         screen.y * up;
 
+    
     ray.direction = normalize(focusPoint - ray.origin);
 
     vec3 totalLight = vec3(0);
-
     for(int i = 0; i < numRaysPerPixel; i++){
+        rng = uint(randomFloat(rng) * 4294967295.0);
         totalLight += trace(ray, rng);
     }
-
     totalLight /= numRaysPerPixel; //average
 
-    float effectiveFrame = min(float(frameIndex), 150.0); //puts a ceiling on the amount of accumulated frames
-    effectiveFrame = frameIndex;
+    float weight = 1.0/(frameIndex+1);
 
-    vec3 prev = texture(previousFrame, uv).rgb;
-    float weight = 1.0/(effectiveFrame+1);
-
-    FragColor = vec4(mix(prev, totalLight, weight), 1.0f);
+    FragColor = vec4(texture(previousFrame, uv).rgb * (1 - weight) + totalLight * weight, 1.0f);
 }

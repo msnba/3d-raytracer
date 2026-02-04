@@ -5,14 +5,13 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
-#include "imgui.h"
 
 #include "camera.h"
 #include "shader.h"
-#include "window.h"
+#include "window.h" //includes imgui imports
 #include "object.h"
 
-void mouseInput(GLFWwindow *window, double xpos, double ypos);
+void mouseInput(GLFWwindow *window, double xposd, double yposd);
 void getInput(GLFWwindow *window);
 void resetAccumulation();
 
@@ -57,7 +56,6 @@ int main()
     // -- Pixel Shader --
     Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
 
-    // ! THIS WILL BE REPLACED BY A COMPUTE SHADER LATER
     float quad[] = {// using a quad so fragment shader runs over every pixel on the screen
                     -1.f, -1.f,
                     1.f, -1.f,
@@ -80,13 +78,15 @@ int main()
     // -- Object Instantiation --
     Scene scene;
 
-    scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {1.f, 1.0f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 10.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
-    scene.spheres.push_back({{2.f, -5.0f, -30.f}, 15.0f, {0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
+    // scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {1.f, 0.f, 0.f, 0.f}});
+    // scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 5.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
 
-    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.9f, {0.f, 0.f, 0.f, 0.f}}, Transform{{-5.f, 0.f, -10.f}}, scene.materials));
+    // scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, -10.f}}, scene.materials));
+    
+    scene.meshes.push_back(loadRect({{{0,0,-12.5f},{0,0,0},{20,.5f,20}}, {{1,1,1}, 0, {0,0,0,0}}}, scene));
+    scene.spheres.push_back({{1, 1, 0.f}, 1.0f, {1.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
 
     // -- SSBO's --
 
@@ -147,7 +147,7 @@ int main()
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            GL_RGBA16F,
+            GL_RGBA32F,
             SCR_WIDTH,
             SCR_HEIGHT,
             0,
@@ -194,14 +194,14 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(SCR_WIDTH / 15.0f, SCR_HEIGHT / 30.0f), ImGuiCond_Always);
         ImGui::Begin("Stats Panel", nullptr,
                      ImGuiWindowFlags_NoResize |
                          ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_AlwaysAutoResize |
                          ImGuiWindowFlags_NoDecoration);
 
-        ImGui::Text("FPS: %.1f", fps);
-        ImGui::Text("DT: %.3f", deltaTime);
+        ImGui::Text("FPS: %.0f", fps);
+        // ImGui::Text("DT: %.3f", deltaTime);
         ImGui::End();
 
         // start draw
@@ -231,7 +231,7 @@ int main()
         raytracer.setFloat("fov", camera.fov);
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
         glUniform1ui(glGetUniformLocation(raytracer.ID, "maxBounce"), 30);
-        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 25);
+        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 10);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -292,6 +292,7 @@ void mouseInput(GLFWwindow *window, double xposd, double yposd)
     if (xoffset != 0.0f || yoffset != 0.0f)
         cameraDirty = true;
 }
+
 void getInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)

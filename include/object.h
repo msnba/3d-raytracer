@@ -10,31 +10,9 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+// -- Structs --
 struct GPUMaterial
 {
-    glm::vec3 color;
-    float smoothness;
-    glm::vec4 emission;
-};
-
-struct GPUTriangle
-{
-    glm::vec4 v0, v1, v2; // vec4 used for padding
-    glm::vec4 n0, n1, n2;
-};
-
-struct GPUMesh
-{
-    uint32_t firstTriangle;
-    uint32_t triangleCount;
-    uint32_t materialIdx;
-};
-struct GPUSphere
-{
-    glm::vec3 position;
-    float radius;
-
-    // explicit GPUMaterial declaration or else it breaks
     glm::vec3 color;
     float smoothness;
     glm::vec4 emission;
@@ -62,6 +40,35 @@ struct Transform
     };
 };
 
+struct GPUTriangle
+{
+    glm::vec4 v0, v1, v2; // vec4 used for padding
+    glm::vec4 n0, n1, n2;
+};
+
+struct GPUMesh
+{
+    uint32_t firstTriangle;
+    uint32_t triangleCount;
+    uint32_t materialIdx;
+};
+struct GPUSphere
+{
+    glm::vec3 position;
+    float radius;
+
+    // explicit GPUMaterial declaration or else it breaks
+    glm::vec3 color;
+    float smoothness;
+    glm::vec4 emission;
+};
+
+struct Rectangle
+{
+    Transform transform;
+    GPUMaterial material;
+};
+
 struct Mesh
 {
     std::vector<tinyobj::index_t> indices;
@@ -76,6 +83,8 @@ struct Scene
     std::vector<GPUMaterial> materials;
     std::vector<GPUSphere> spheres;
 };
+
+// -- Mesh Handling --
 
 static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &transform, std::vector<GPUMaterial> &materialPool) // mesh loader method
 {
@@ -176,6 +185,13 @@ static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &out
 
         triOffset += triangleCount;
     }
+}
+
+// -- Primitive Handling --
+static Mesh loadRect(Rectangle rect, Scene &scene)
+{
+    // lazy way of doing this until i fix it
+    return loadMesh("assets/models/cube.obj", rect.material, rect.transform, scene.materials);
 }
 
 #endif

@@ -5,7 +5,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     if (!glfwInit())
         return;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // TODO: Handle resizing properly.
 
@@ -23,7 +23,6 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     }
 
     glfwMakeContextCurrent(window); // ! Window must be contextualized before GLAD initialization.
-    glfwSwapInterval(1);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -41,7 +40,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 450");
+    ImGui_ImplOpenGL3_Init("#version 430");
 };
 
 Window::~Window()

@@ -5,7 +5,7 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 ## Screenshots
 
 <div align="center">
-  <img src="gh_assets/mirrortest.png" alt="Mirror Test w/ Spheres" width="45%">
+  <img src="gh_assets/mirrortest.png" alt="Mirror Test w/ Spheres" width="50%">
 </div>
 
 ## Prerequisites 📝
@@ -14,6 +14,7 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 - [CMake](https://cmake.org)
 - [vcpkg](https://vcpkg.io/en)
 - [Ninja](https://ninja-build.org/) (Or another build system, just switch up the configure cmd.)
+- [OpenGL 4.3+](https://www.opengl.org/)
 
 ## Building 🔨
 
