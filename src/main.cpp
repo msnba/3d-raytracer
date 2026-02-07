@@ -13,7 +13,6 @@
 
 void mouseInput(GLFWwindow *window, double xposd, double yposd);
 void getInput(GLFWwindow *window);
-void resetAccumulation();
 
 const unsigned int SCR_WIDTH = 1440;
 const unsigned int SCR_HEIGHT = 1080;
@@ -30,30 +29,14 @@ uint32_t frameIndex = 0;
 
 GLuint *gAccumFBO = nullptr;
 
-void resetAccumulation()
-{
-    frameIndex = 0;
-
-    if (!gAccumFBO)
-        return;
-
-    for (int i = 0; i < 2; i++)
-    {
-        glBindFramebuffer(GL_FRAMEBUFFER, gAccumFBO[i]);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
 int main()
 {
     // -- Settings --
     glfwSetCursorPosCallback(window.window, mouseInput);
     glfwSetInputMode(window.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
     glDisable(GL_BLEND);
 
-    // -- Pixel Shader --
+    // -- Shader --
     Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
 
     float quad[] = {// using a quad so fragment shader runs over every pixel on the screen
@@ -81,12 +64,14 @@ int main()
     // scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {1.f, 0.f, 0.f, 0.f}});
     // scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
     // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 5.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
+    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
 
-    // scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, -10.f}}, scene.materials));
-    
-    scene.meshes.push_back(loadRect({{{0,0,-12.5f},{0,0,0},{20,.5f,20}}, {{1,1,1}, 0, {0,0,0,0}}}, scene));
-    scene.spheres.push_back({{1, 1, 0.f}, 1.0f, {1.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, -10.f}}, scene.materials));
+
+    scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {20, .5f, 20}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
+    scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{3, 1.5, -1.25f}, 1.0f, {0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{8, 1.5, 0.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
 
     // -- SSBO's --
 
@@ -134,6 +119,21 @@ int main()
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, meshSSBO);
 
+    struct GPUSceneData
+    {
+        glm::vec2 rayBehavior;
+    } sceneData{{30, 10}}; // maxBounce, numRaysPerPixel
+
+    GLuint dataSSBO;
+    glGenBuffers(1, &dataSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, dataSSBO);
+    glBufferData(
+        GL_SHADER_STORAGE_BUFFER,
+        sizeof(GPUSceneData),
+        &sceneData,
+        GL_STATIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, dataSSBO);
+
     // -- Frame Accumulation --
 
     GLuint accumTex[2];
@@ -170,7 +170,7 @@ int main()
 
     gAccumFBO = accumFBO;
 
-    int ping = 0;
+    int flip = 0;
 
     while (!glfwWindowShouldClose(window.window))
     {
@@ -185,7 +185,7 @@ int main()
 
         if (cameraDirty)
         {
-            resetAccumulation();
+            frameIndex = 0;
             cameraDirty = false;
         }
 
@@ -205,38 +205,31 @@ int main()
         ImGui::End();
 
         // start draw
-        int pong = 1 - ping; // effectively flips frame buffers
         ImGui::Render();
-        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[ping]);
+        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[flip]);
         glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(raytracer.ID);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, accumTex[pong]);
+        glBindTexture(GL_TEXTURE_2D, accumTex[flip ^ 1]);
         glUniform1i(glGetUniformLocation(raytracer.ID, "previousFrame"), 0);
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "frameIndex"),
             frameIndex);
 
-        glUniform1ui(
-            glGetUniformLocation(raytracer.ID, "sphereCount"),
-            static_cast<int>(scene.spheres.size()));
-
         raytracer.setVec3("cameraPos", camera.cameraPos);
         raytracer.setVec3("cameraFront", camera.cameraFront);
         raytracer.setVec3("cameraUp", camera.cameraUp);
         raytracer.setFloat("fov", camera.fov);
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
-        glUniform1ui(glGetUniformLocation(raytracer.ID, "maxBounce"), 30);
-        glUniform1ui(glGetUniformLocation(raytracer.ID, "numRaysPerPixel"), 10);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, accumFBO[ping]);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, accumFBO[flip]);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
         glBlitFramebuffer( // copies previous frem buffer to another
@@ -245,11 +238,10 @@ int main()
             GL_COLOR_BUFFER_BIT,
             GL_NEAREST);
 
-        ping = pong;
+        flip ^= 1;
         frameIndex++; // * Comment out to disable accumulation
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
         glfwSwapBuffers(window.window);
     }
 

@@ -11,12 +11,6 @@
 #include "tiny_obj_loader.h"
 
 // -- Structs --
-struct GPUMaterial
-{
-    glm::vec3 color;
-    float smoothness;
-    glm::vec4 emission;
-};
 
 struct Transform
 {
@@ -39,6 +33,12 @@ struct Transform
         return T * R * S;
     };
 };
+struct GPUMaterial
+{
+    glm::vec3 color;
+    float smoothness;
+    glm::vec4 emission;
+};
 
 struct GPUTriangle
 {
@@ -48,9 +48,9 @@ struct GPUTriangle
 
 struct GPUMesh
 {
-    uint32_t firstTriangle;
-    uint32_t triangleCount;
-    uint32_t materialIdx;
+    glm::uvec4 data; // firstTriangle, triangleCount, materialIdx, pad
+    glm::vec4 minBounds;
+    glm::vec4 maxBounds;
 };
 struct GPUSphere
 {
@@ -75,6 +75,8 @@ struct Mesh
     const tinyobj::attrib_t *attrib;
     Transform transform;
     uint32_t materialIdx;
+    glm::vec3 minBounds;
+    glm::vec3 maxBounds;
 };
 
 struct Scene
@@ -115,6 +117,8 @@ static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Tran
         return Mesh();
     }
 
+    glm::vec3 minB(std::numeric_limits<float>::max());
+    glm::vec3 maxB(std::numeric_limits<float>::lowest());
     std::vector<tinyobj::index_t> indices;
 
     for (const tinyobj::shape_t &shape : shapes)
@@ -122,10 +126,35 @@ static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Tran
         for (const tinyobj::index_t &idx : shape.mesh.indices)
         {
             indices.push_back(idx);
+
+            float vx = attrib->vertices[3 * idx.vertex_index + 0];
+            float vy = attrib->vertices[3 * idx.vertex_index + 1];
+            float vz = attrib->vertices[3 * idx.vertex_index + 2];
+
+            minB = glm::min(minB, glm::vec3(vx, vy, vz));
+            maxB = glm::max(maxB, glm::vec3(vx, vy, vz));
         }
     }
 
-    return Mesh{std::move(indices), attrib, transform, materialIndex};
+    return Mesh{std::move(indices), attrib, transform, materialIndex, minB, maxB};
+}
+
+glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
+{
+    return glm::vec3(
+        attrib.vertices[3 * idx.vertex_index + 0],
+        attrib.vertices[3 * idx.vertex_index + 1],
+        attrib.vertices[3 * idx.vertex_index + 2]);
+}
+
+glm::vec3 nrm(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
+{
+    if (idx.normal_index < 0)
+        return glm::vec3(0, 1, 0);
+    return glm::vec3(
+        attrib.normals[3 * idx.normal_index + 0],
+        attrib.normals[3 * idx.normal_index + 1],
+        attrib.normals[3 * idx.normal_index + 2]);
 }
 
 static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes)
@@ -138,52 +167,57 @@ static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &out
     for (const Mesh &mesh : scene.meshes)
     {
         const tinyobj::attrib_t &attrib = *mesh.attrib;
-        size_t triangleCount = static_cast<uint32_t>(mesh.indices.size() / 3);
+        glm::mat4 model = mesh.transform.getMatrix(); // Compute once here
+        glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
 
         for (size_t i = 0; i < mesh.indices.size(); i += 3)
         {
-            const tinyobj::index_t &i0 = mesh.indices[i + 0];
-            const tinyobj::index_t &i1 = mesh.indices[i + 1];
-            const tinyobj::index_t &i2 = mesh.indices[i + 2];
-
-            auto pos = [&](const tinyobj::index_t &idx)
+            tinyobj::index_t ind[3] = {};
+            for (int j = 0; j < 3; j++)
             {
-                return glm::vec3(
-                    attrib.vertices[3 * idx.vertex_index + 0],
-                    attrib.vertices[3 * idx.vertex_index + 1],
-                    attrib.vertices[3 * idx.vertex_index + 2]);
-            };
-
-            auto nrm = [&](const tinyobj::index_t &idx)
-            {
-                if (idx.normal_index < 0)
-                    return glm::vec3(0, 1, 0);
-                return glm::vec3(
-                    attrib.normals[3 * idx.normal_index + 0],
-                    attrib.normals[3 * idx.normal_index + 1],
-                    attrib.normals[3 * idx.normal_index + 2]);
-            };
+                ind[j] = mesh.indices[i + j];
+            }
 
             GPUTriangle tri;
-            glm::mat4 model = mesh.transform.getMatrix();
 
-            tri.v0 = model * glm::vec4(pos(i0), 1.0f);
-            tri.v1 = model * glm::vec4(pos(i1), 1.0f);
-            tri.v2 = model * glm::vec4(pos(i2), 1.0f);
+            tri.v0 = model * glm::vec4(pos(ind[0], attrib), 1.0f);
+            tri.v1 = model * glm::vec4(pos(ind[1], attrib), 1.0f);
+            tri.v2 = model * glm::vec4(pos(ind[2], attrib), 1.0f);
 
-            glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(model)));
-            tri.n0 = glm::vec4(normalMatrix * nrm(i0), 0.0f);
-            tri.n1 = glm::vec4(normalMatrix * nrm(i1), 0.0f);
-            tri.n2 = glm::vec4(normalMatrix * nrm(i2), 0.0f);
+            tri.n0 = glm::vec4(normalMatrix * nrm(ind[0], attrib), 0.0f);
+            tri.n1 = glm::vec4(normalMatrix * nrm(ind[1], attrib), 0.0f);
+            tri.n2 = glm::vec4(normalMatrix * nrm(ind[2], attrib), 0.0f);
             outTriangles.push_back(tri);
         }
 
-        outMeshes.push_back(GPUMesh{
-            static_cast<uint32_t>(triOffset),
-            static_cast<uint32_t>(triangleCount),
-            mesh.materialIdx});
+        glm::vec3 corners[8] = {// just hard programmed in the corners
+                                mesh.minBounds,
+                                {mesh.maxBounds.x, mesh.minBounds.y, mesh.minBounds.z},
+                                {mesh.minBounds.x, mesh.maxBounds.y, mesh.minBounds.z},
+                                {mesh.minBounds.x, mesh.minBounds.y, mesh.maxBounds.z},
+                                {mesh.minBounds.x, mesh.maxBounds.y, mesh.maxBounds.z},
+                                {mesh.maxBounds.x, mesh.minBounds.y, mesh.maxBounds.z},
+                                {mesh.maxBounds.x, mesh.maxBounds.y, mesh.minBounds.z},
+                                mesh.maxBounds};
 
-        triOffset += triangleCount;
+        glm::vec3 worldMin(std::numeric_limits<float>::max());
+        glm::vec3 worldMax(std::numeric_limits<float>::lowest());
+
+        for (int i = 0; i < 8; i++)
+        {
+            glm::vec3 worldCorner = glm::vec3(model * glm::vec4(corners[i], 1.0f));
+            worldMin = glm::min(worldMin, worldCorner);
+            worldMax = glm::max(worldMax, worldCorner);
+        }
+
+        outMeshes.push_back(GPUMesh{
+            glm::uvec4(static_cast<uint32_t>(triOffset),
+                       static_cast<uint32_t>(mesh.indices.size() / 3),
+                       mesh.materialIdx, 0),
+            glm::vec4(worldMin, 0),
+            glm::vec4(worldMax, 0)});
+
+        triOffset += (mesh.indices.size()) / 3;
     }
 }
 

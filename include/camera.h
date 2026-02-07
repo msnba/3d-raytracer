@@ -6,9 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-class Camera
+struct Camera
 {
-public:
     float fov, speed, yaw, pitch;
     glm::vec3 cameraPos, cameraFront, cameraUp;
 
