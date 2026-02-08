@@ -21,8 +21,9 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float fps = 0.0f;
 
-Camera camera(90.0f, 6.0f); // fov, speed
-bool cameraDirty = true;    // dictates when the frame clears so there isn't smudging
+// Camera camera(90.0f, 6.0f); // fov, speed
+Camera camera(90.0f, 6.0f, 0.0f, -10.0f, glm::vec3(-5, 4, 0));
+bool cameraDirty = true; // dictates when the frame clears so there isn't smudging
 
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
 uint32_t frameIndex = 0;
@@ -32,12 +33,14 @@ GLuint *gAccumFBO = nullptr;
 int main()
 {
     // -- Settings --
-    glfwSetCursorPosCallback(window.window, mouseInput);
+    // glfwSetCursorPosCallback(window.window, mouseInput);
     glfwSetInputMode(window.window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glDisable(GL_BLEND);
 
     // -- Shader --
-    Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
+    // Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
+    Shader pass("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
+    Shader raytracer("assets/raytracer.comp");
 
     float quad[] = {// using a quad so fragment shader runs over every pixel on the screen
                     -1.f, -1.f,
@@ -66,7 +69,7 @@ int main()
     // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
     scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
 
-    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, 10.f}}, scene.materials));
+    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{10.f, 2.f, 0.f}, {}, glm::vec3(5)}, scene.materials));
 
     scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {20, .5f, 20}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
     scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
@@ -125,8 +128,9 @@ int main()
 
     struct GPUSceneData
     {
-        glm::vec2 rayBehavior;
-    } sceneData{{5, 1}}; // maxBounce, numRaysPerPixel
+        uint32_t maxBounce;
+        uint32_t numRaysPerPixel;
+    } sceneData{5, 1}; // maxBounce, numRaysPerPixel
 
     GLuint dataSSBO;
     glGenBuffers(1, &dataSSBO);
@@ -140,41 +144,31 @@ int main()
 
     // -- Frame Accumulation --
 
-    GLuint accumTex[2];
-    GLuint accumFBO[2]; // swapping frame buffers to pass past frame into fragment shader for averaging
-    glGenTextures(2, accumTex);
-    glGenFramebuffers(2, accumFBO);
+    GLuint accumTex;
+    glGenTextures(1, &accumTex);
+    glBindTexture(GL_TEXTURE_2D, accumTex);
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA32F,
+        SCR_WIDTH,
+        SCR_HEIGHT,
+        0,
+        GL_RGBA,
+        GL_FLOAT,
+        nullptr);
 
-    for (int i = 0; i < 2; i++)
-    {
-        glBindTexture(GL_TEXTURE_2D, accumTex[i]);
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA32F,
-            SCR_WIDTH,
-            SCR_HEIGHT,
-            0,
-            GL_RGBA,
-            GL_FLOAT,
-            nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[i]);
-        glFramebufferTexture2D(
-            GL_FRAMEBUFFER,
-            GL_COLOR_ATTACHMENT0,
-            GL_TEXTURE_2D,
-            accumTex[i],
-            0);
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    gAccumFBO = accumFBO;
-
-    int flip = 0;
+    glBindImageTexture(
+        0,
+        accumTex,
+        0,
+        GL_FALSE,
+        0,
+        GL_READ_WRITE,
+        GL_RGBA32F);
 
     while (!glfwWindowShouldClose(window.window))
     {
@@ -198,27 +192,23 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(SCR_WIDTH / 15.0f, SCR_HEIGHT / 30.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(SCR_WIDTH / 20.0f, SCR_HEIGHT / 30.0f), ImGuiCond_Always);
         ImGui::Begin("Stats Panel", nullptr,
                      ImGuiWindowFlags_NoResize |
                          ImGuiWindowFlags_NoMove |
-                         ImGuiWindowFlags_NoDecoration);
+                         ImGuiWindowFlags_NoDecoration |
+                         ImGuiWindowFlags_AlwaysAutoResize);
 
         ImGui::Text("FPS: %.0f", fps);
+        // ImGui::Text("%u", frameIndex);
+        // ImGui::Text("%f0 %f1 %f2", camera.cameraPos[0], camera.cameraPos[1], camera.cameraPos[2]);
+        // ImGui::Text("%.0f", camera.pitch);
+        // ImGui::Text("%.0f", camera.yaw);
         // ImGui::Text("DT: %.3f", deltaTime);
         ImGui::End();
 
-        // start draw
-        ImGui::Render();
-        glBindFramebuffer(GL_FRAMEBUFFER, accumFBO[flip]);
-        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-        glClear(GL_COLOR_BUFFER_BIT);
-
+        // start compute
         glUseProgram(raytracer.ID);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, accumTex[flip ^ 1]);
-        glUniform1i(glGetUniformLocation(raytracer.ID, "previousFrame"), 0);
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "frameIndex"),
@@ -231,26 +221,31 @@ int main()
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
 
         glUniform1ui(
-            glGetUniformLocation(raytracer.ID, "meshCount"),
-            meshCount);
-
-        glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
             sphereCount);
+
+        glDispatchCompute(
+            (SCR_WIDTH + 7) / 8,
+            (SCR_HEIGHT + 7) / 8,
+            1);
+
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // used for shared frames
+
+        // start draw
+        ImGui::Render();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glUseProgram(pass.ID);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, accumTex);
+        glUniform1i(glGetUniformLocation(pass.ID, "accumTex"), 0);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, accumFBO[flip]);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-        glBlitFramebuffer( // copies previous frem buffer to another
-            0, 0, SCR_WIDTH, SCR_HEIGHT,
-            0, 0, SCR_WIDTH, SCR_HEIGHT,
-            GL_COLOR_BUFFER_BIT,
-            GL_NEAREST);
-
-        flip ^= 1;
         frameIndex++; // * Comment out to disable accumulation
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

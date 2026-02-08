@@ -13,6 +13,21 @@ Camera::Camera(float fov, float speed)
     pitch = 0.0f;
 }
 
+Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos)
+{
+    this->fov = fov;
+    this->speed = speed;
+
+    this->cameraPos = cameraPos;
+    this->cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
+    this->cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+    this->yaw = yaw;
+    this->pitch = pitch;
+
+    Camera::normalize();
+}
+
 void Camera::getInput(GLFWwindow *window, float deltaTime)
 {
     float velocity = speed * deltaTime;

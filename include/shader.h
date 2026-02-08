@@ -22,6 +22,7 @@ public:
     unsigned int ID;
 
     Shader(const char *vertexPath, const char *fragmentPath, ShaderType type);
+    Shader(const char *computePath);
 
     void setBool(const std::string &name, bool value) const;
     void setInt(const std::string &name, int value) const;

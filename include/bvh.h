@@ -9,8 +9,8 @@
 
 struct BVH
 {
-    static constexpr size_t MAX_DEPTH = 10;
-    static constexpr size_t LEAF_TRIANGLES = 4;
+    static constexpr size_t MAX_DEPTH = 20;
+    static constexpr size_t LEAF_TRIANGLES = 6;
 
     struct GPUNode
     {

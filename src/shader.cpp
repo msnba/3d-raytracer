@@ -90,6 +90,51 @@ Shader::Shader(const char *vertexPath, const char *fragmentPath, ShaderType type
     glDeleteShader(fragment);
 }
 
+Shader::Shader(const char *computePath)
+{
+    std::ifstream file(computePath);
+    if (!file.is_open())
+    {
+        std::cerr << "ERROR: Failed to open compute shader: "
+                  << computePath << std::endl;
+        return;
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string sourceStr = buffer.str();
+    const char *source = sourceStr.c_str();
+
+    GLuint computeShader = glCreateShader(GL_COMPUTE_SHADER);
+    glShaderSource(computeShader, 1, &source, nullptr);
+    glCompileShader(computeShader);
+
+    GLint success;
+    glGetShaderiv(computeShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        char infoLog[1024];
+        glGetShaderInfoLog(computeShader, 1024, nullptr, infoLog);
+        std::cerr << "ERROR: Compute shader compilation failed\n"
+                  << infoLog << std::endl;
+    }
+
+    ID = glCreateProgram();
+    glAttachShader(ID, computeShader);
+    glLinkProgram(ID);
+
+    glGetProgramiv(ID, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        char infoLog[1024];
+        glGetProgramInfoLog(ID, 1024, nullptr, infoLog);
+        std::cerr << "ERROR: Compute shader linking failed\n"
+                  << infoLog << std::endl;
+    }
+
+    glDeleteShader(computeShader);
+}
+
 void Shader::setBool(const std::string &name, bool value) const
 {
     glUniform1i(glGetUniformLocation(ID, name.c_str()), (int)value);

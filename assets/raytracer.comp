@@ -1,19 +1,16 @@
-#version 430 core
+#version 430
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(rgba32f, binding = 0) uniform image2D accumImage;
 
 //-- Data --
-out vec4 FragColor;
-in vec2 TexCoords;
-
 uniform vec2 resolution;
 uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
 
-uniform uint meshCount;
 uniform uint sphereCount;
 
-// frame accumulation
-uniform sampler2D previousFrame;
 uniform uint frameIndex;
 
 // -- Structs --
@@ -27,6 +24,7 @@ struct Material {
 struct Ray {
     vec3 origin;
     vec3 direction;
+    vec3 invDir;
 };
 
 struct Collision {
@@ -64,7 +62,8 @@ struct BVHNode {
 // -- SSBOs --
 
 struct SceneData {
-    vec2 rayBehavior; // maxbounce, numraysperpixel
+    uint maxBounce;
+    uint numRaysPerPixel;
 };
 
 layout(std430, binding = 0) buffer Spheres {
@@ -111,18 +110,18 @@ Collision raySphere(Ray ray, Sphere s){
     return collision;
 }
 
-bool rayAABB(Ray ray, vec3 minB, vec3 maxB){
-    vec3 invDir = 1.0 / ray.direction; //precompute cuz f division
-
-    vec3 t0 = (minB - ray.origin) * invDir;
-    vec3 t1 = (maxB - ray.origin) * invDir;
+bool rayAABB(Ray ray, vec3 minB, vec3 maxB, float maxDist){
+    vec3 t0 = (minB - ray.origin) * ray.invDir;
+    vec3 t1 = (maxB - ray.origin) * ray.invDir;
 
     vec3 tmin = min(t0, t1);
     vec3 tmax = max(t0, t1);
+    
+    float tNear = max(max(tmin.x, tmin.y), tmin.z);
+    float tFar = min(min(tmax.x, tmax.y), tmax.z);
 
-    return min(min(tmax.x, tmax.y), tmax.z) >= max(max(max(tmin.x, tmin.y), tmin.z), 0.0); // this looks scary but just computes if max is bigger than min dw
+    return tFar >= max(tNear, 0.0) && tNear < maxDist;
 }
-
 // Moller-Trumbore algorithm
 // https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
 // adapted from https://stackoverflow.com/a/42752998
@@ -156,7 +155,7 @@ Collision rayBVH(Ray ray){
     closest.didHit = 0;
     closest.distance = 1e30;
 
-    uint stack[128];
+    uint stack[32];
     uint stackPtr = 0;
     stack[stackPtr++] = 0;
 
@@ -164,7 +163,7 @@ Collision rayBVH(Ray ray){
         uint idx = stack[--stackPtr];
         BVHNode node = nodes[idx];
 
-        if(!rayAABB(ray, node.min, node.max)) continue;
+        if(!rayAABB(ray, node.min, node.max, closest.distance)) continue;
 
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
@@ -174,8 +173,11 @@ Collision rayBVH(Ray ray){
                     closest = c;
             }
         }else{
-            stack[stackPtr++] = node.leftFirst;
-            stack[stackPtr++] = node.leftFirst + 1;
+            if (stackPtr + 2 <= 32) {
+                stack[stackPtr++] = node.leftFirst;
+                stack[stackPtr++] = node.leftFirst + 1;
+                continue;
+            }
         }
     }
 
@@ -245,7 +247,7 @@ vec3 trace(Ray ray, inout uint rng){
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1.0f);
 
-    for(int i=0; i <= sceneData.rayBehavior.x; i++){
+    for(int i=0; i <= sceneData.maxBounce; i++){
         Collision collision = calculateRayCollision(ray);
         if(collision.didHit == 0){
             incomingLight += ambient(ray);
@@ -262,8 +264,8 @@ vec3 trace(Ray ray, inout uint rng){
         rayColor *= collision.material.color.rgb;
 
         // russian roulette
-        if (i > 3){
-            float p = max(rayColor.r, max(rayColor.g, rayColor.b));
+        float p = max(rayColor.r, max(rayColor.g, rayColor.b));
+        if (i > 0){
             p = clamp(p, 0.05, 0.95);
 
             if(randomFloat(rng) > p) break;
@@ -284,16 +286,15 @@ uint hash(uint x) {
 
 void main()
 {
-    vec2 uv = TexCoords; // [0,1]
-    vec2 screen = uv - 0.5;
-    screen.x *= resolution.x / resolution.y; // aspect correction
-    uvec2 numPixels = uvec2(resolution);
-    uvec2 pixelCoord = uvec2(uv * vec2(numPixels));
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (pixel.x >= uint(resolution.x) || pixel.y >= uint(resolution.y))
+        return;
 
-    
-    // uint rng = pixelCoord.y * numPixels.x + pixelCoord.x + frameIndex * 9781u;
-    // uint rng = pixelCoord.y * numPixels.x + pixelCoord.x;
-    uint rng = hash((pixelCoord.y * numPixels.x + pixelCoord.x) ^ hash(frameIndex)); //slap a little hashing on it and call it a day
+    vec2 uv = (vec2(pixel) + 0.5) / resolution;
+    vec2 screen = uv - 0.5;
+    screen.x *= resolution.x / resolution.y;
+
+    uint rng = hash((pixel.y * uint(resolution.x) + pixel.x) ^ hash(frameIndex));
 
     vec3 forward = normalize(cameraFront);
     vec3 right   = normalize(cross(forward, cameraUp));
@@ -301,23 +302,30 @@ void main()
 
     Ray ray;
     ray.origin = cameraPos;
-    vec3 focusPoint =
+    ray.direction = normalize(
         cameraPos +
         forward +
         screen.x * right +
-        screen.y * up;
-
-    
-    ray.direction = normalize(focusPoint - ray.origin);
+        screen.y * up -
+        cameraPos
+    );
+    ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);
-    for(int i = 0; i < sceneData.rayBehavior.y; i++){
+    for (int i = 0; i < int(sceneData.numRaysPerPixel); i++) {
         rng = uint(randomFloat(rng) * 4294967295.0);
         totalLight += trace(ray, rng);
     }
-    totalLight /= sceneData.rayBehavior.y; //average
+    totalLight /= sceneData.numRaysPerPixel;
 
-    float weight = 1.0/(frameIndex+1);
+    if (frameIndex == 0) {
+        imageStore(accumImage, ivec2(pixel), vec4(totalLight, 1.0));
+        return;
+    }
 
-    FragColor = vec4(texture(previousFrame, uv).rgb * (1 - weight) + totalLight * weight, 1.0f);
+    vec4 prev = imageLoad(accumImage, ivec2(pixel));
+    float weight = 1.0 / (frameIndex + 1);
+
+    vec3 color = mix(prev.rgb, totalLight, weight);
+    imageStore(accumImage, ivec2(pixel), vec4(color, 1.0));
 }

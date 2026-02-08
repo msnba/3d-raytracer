@@ -12,6 +12,7 @@ struct Camera
     glm::vec3 cameraPos, cameraFront, cameraUp;
 
     Camera(float fov = 60.0f, float speed = 5.0f);
+    Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos);
 
     void getInput(GLFWwindow *window, float deltaTime);
 
