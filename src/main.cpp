@@ -1,7 +1,6 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h> // ! Must be included after GLAD (due to method overriding).
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
@@ -10,6 +9,7 @@
 #include "shader.h"
 #include "window.h" //includes imgui imports
 #include "object.h"
+#include "bvh.h"
 
 void mouseInput(GLFWwindow *window, double xposd, double yposd);
 void getInput(GLFWwindow *window);
@@ -66,7 +66,7 @@ int main()
     // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
     scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
 
-    scene.meshes.push_back(loadMesh("assets/models/tetrahedron.obj", GPUMaterial{{0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, -10.f}}, scene.materials));
+    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{0.f, 1.f, 0.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{4.f, 2.f, 10.f}}, scene.materials));
 
     scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {20, .5f, 20}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
     scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
@@ -74,13 +74,15 @@ int main()
     scene.spheres.push_back({{8, 1.5, 0.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
 
     // -- SSBO's --
+    uint32_t meshCount = scene.meshes.size();
+    uint32_t sphereCount = scene.spheres.size();
 
     GLuint sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        scene.spheres.size() * sizeof(GPUSphere),
+        sphereCount * sizeof(GPUSphere),
         scene.spheres.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO);
@@ -99,6 +101,8 @@ int main()
     std::vector<GPUMesh> gpuMeshes;
     convertToGPUMeshes(scene, triangles, gpuMeshes);
 
+    BVH bvh(triangles); // reorders the triangles
+
     GLuint triSSBO;
     glGenBuffers(1, &triSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
@@ -109,20 +113,20 @@ int main()
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO);
 
-    GLuint meshSSBO;
-    glGenBuffers(1, &meshSSBO);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, meshSSBO);
+    GLuint bvhSSBO;
+    glGenBuffers(1, &bvhSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        gpuMeshes.size() * sizeof(GPUMesh),
-        gpuMeshes.data(),
+        bvh.nodes.size() * sizeof(BVH::GPUNode),
+        bvh.nodes.data(),
         GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, meshSSBO);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO);
 
     struct GPUSceneData
     {
         glm::vec2 rayBehavior;
-    } sceneData{{30, 10}}; // maxBounce, numRaysPerPixel
+    } sceneData{{5, 1}}; // maxBounce, numRaysPerPixel
 
     GLuint dataSSBO;
     glGenBuffers(1, &dataSSBO);
@@ -225,6 +229,14 @@ int main()
         raytracer.setVec3("cameraUp", camera.cameraUp);
         raytracer.setFloat("fov", camera.fov);
         raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
+
+        glUniform1ui(
+            glGetUniformLocation(raytracer.ID, "meshCount"),
+            meshCount);
+
+        glUniform1ui(
+            glGetUniformLocation(raytracer.ID, "sphereCount"),
+            sphereCount);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);

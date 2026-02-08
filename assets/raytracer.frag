@@ -9,6 +9,9 @@ uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
 
+uniform uint meshCount;
+uniform uint sphereCount;
+
 // frame accumulation
 uniform sampler2D previousFrame;
 uniform uint frameIndex;
@@ -27,7 +30,7 @@ struct Ray {
 };
 
 struct Collision {
-    bool didHit;
+    uint didHit;
     float distance;
     vec3 hitPoint;
     vec3 normal;
@@ -35,20 +38,27 @@ struct Collision {
 };
 
 struct Triangle {
-    vec4 a, b, c;
-    vec4 n0, n1, n2;
-};
+    vec3 a;
+    uint materialIdx;
+    
+    vec3 b;
+    uint pad0;
 
-struct Mesh {
-    uvec4 data; // firstTriangle, triangleCount, materialIdx, pad
-    vec4 minBounds;
-    vec4 maxBounds;
+    vec3 c;
+    uint pad1;
 };
 
 struct Sphere {
     vec3 pos;
     float radius;
     Material material;
+};
+
+struct BVHNode {
+    vec3 min;
+    uint leftFirst; // index of left child OR first triangle
+    vec3 max;
+    uint triangleCount; // 0 = interior, >0 = leaf
 };
 
 // -- SSBOs --
@@ -69,8 +79,8 @@ layout(std430, binding = 2) buffer Triangles {
     Triangle triangles[];
 };
 
-layout(std430, binding = 3) buffer Meshes {
-    Mesh meshes[];
+layout(std430, binding = 3) buffer BVHNodes {
+    BVHNode nodes[];
 };
 
 layout(std140, binding = 4) buffer Data {
@@ -81,7 +91,7 @@ layout(std140, binding = 4) buffer Data {
 
 Collision raySphere(Ray ray, Sphere s){
     Collision collision;
-    collision.didHit = false;
+    collision.didHit = 0;
 
     vec3 oc = s.pos - ray.origin;
 
@@ -94,7 +104,7 @@ Collision raySphere(Ray ray, Sphere s){
     if(distRay2 > r2) return collision; //if distance to ray greater to radius, miss
 
     collision.distance = closestApproach - sqrt(r2 - distRay2); //closest - distance from closest to sphere surface
-    collision.didHit = true;
+    collision.didHit = 1;
     collision.hitPoint = ray.origin + ray.direction * collision.distance;
     collision.normal = (collision.hitPoint - s.pos) / s.radius; // cheaper normal
     collision.material = s.material;
@@ -116,9 +126,9 @@ bool rayAABB(Ray ray, vec3 minB, vec3 maxB){
 // Moller-Trumbore algorithm
 // https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
 // adapted from https://stackoverflow.com/a/42752998
-Collision rayTriangle(Ray ray, Triangle tri, Material mat){
+Collision rayTriangle(Ray ray, Triangle tri){
     Collision c;
-    c.didHit = false;
+    c.didHit = 0;
 
     vec3 edge1 = tri.b.xyz - tri.a.xyz;
     vec3 edge2 = tri.c.xyz - tri.a.xyz;
@@ -132,46 +142,63 @@ Collision rayTriangle(Ray ray, Triangle tri, Material mat){
     float dist = dot(ao, normalVec) * invdet;
     float w = 1 - u - v;
 
-    c.didHit = det>=1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0;
+    c.didHit = (det>=1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0) ? 1 : 0;
     c.hitPoint = ray.origin + ray.direction * dist;
     c.normal = normalize(normalVec);
     c.distance = dist;
-    c.material = mat;
+    c.material = materials[tri.materialIdx];
 
     return c;
+}
+
+Collision rayBVH(Ray ray){
+    Collision closest;
+    closest.didHit = 0;
+    closest.distance = 1e30;
+
+    uint stack[128];
+    uint stackPtr = 0;
+    stack[stackPtr++] = 0;
+
+    while(stackPtr > 0){
+        uint idx = stack[--stackPtr];
+        BVHNode node = nodes[idx];
+
+        if(!rayAABB(ray, node.min, node.max)) continue;
+
+        if(node.triangleCount > 0){
+            for(uint i = 0; i < node.triangleCount; i++){
+                uint triangleIdx = node.leftFirst + i;
+                Collision c = rayTriangle(ray, triangles[triangleIdx]);
+                if(c.didHit == 1 && c.distance < closest.distance)
+                    closest = c;
+            }
+        }else{
+            stack[stackPtr++] = node.leftFirst;
+            stack[stackPtr++] = node.leftFirst + 1;
+        }
+    }
+
+    return closest;
 }
 
 Collision calculateRayCollision(Ray ray)
 {
     Collision closest;
-    closest.didHit = false;
+    closest.didHit = 0;
     closest.distance = 1e30; // very large distance as a default
 
-    for(int i = 0; i < spheres.length(); i++){
-        Sphere s = spheres[i];
-        Collision current = raySphere(ray, s);
+    for(int i = 0; i < sphereCount; i++){
+        Collision current = raySphere(ray, spheres[i]);
 
-        if(current.didHit && current.distance < closest.distance){
+        if(current.didHit == 1 && current.distance < closest.distance)
             closest = current;
-            closest.material = s.material;
-        }
     }
 
-    for(int i=0; i < meshes.length(); i++){
-        Mesh mesh = meshes[i];
+    Collision triCollision = rayBVH(ray);
+    if(triCollision.didHit == 1 && triCollision.distance < closest.distance)
+        closest = triCollision;
 
-        if(!rayAABB(ray, mesh.minBounds.xyz, mesh.maxBounds.xyz)) continue;
-
-        for(uint j = mesh.data.x; j < mesh.data.x + mesh.data.y; j++){
-            Triangle tri = triangles[j];
-            Material mat = materials[mesh.data.z];
-
-            Collision current = rayTriangle(ray, tri, mat);
-            if(current.didHit && current.distance < closest.distance){
-                closest = current;
-            }
-        }
-    }
     return closest;
 }
 
@@ -211,7 +238,7 @@ vec3 cosineHemisphereDirection(vec3 normal, inout uint rng){ // removes diffuse 
 
 vec3 ambient(Ray ray){
     // this can be over-complicated later
-    return vec3(0.00);
+    return vec3(0.01);
 }
 
 vec3 trace(Ray ray, inout uint rng){
@@ -220,7 +247,7 @@ vec3 trace(Ray ray, inout uint rng){
 
     for(int i=0; i <= sceneData.rayBehavior.x; i++){
         Collision collision = calculateRayCollision(ray);
-        if(!collision.didHit){
+        if(collision.didHit == 0){
             incomingLight += ambient(ray);
             break;
         }

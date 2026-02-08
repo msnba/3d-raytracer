@@ -3,11 +3,11 @@
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <string>
 #include <iostream>
 
-#define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
 // -- Structs --
@@ -42,8 +42,14 @@ struct GPUMaterial
 
 struct GPUTriangle
 {
-    glm::vec4 v0, v1, v2; // vec4 used for padding
-    glm::vec4 n0, n1, n2;
+    glm::vec3 a;
+    uint32_t materialIdx;
+
+    glm::vec3 b;
+    uint32_t pad0;
+
+    glm::vec3 c;
+    uint32_t pad1;
 };
 
 struct GPUMesh
@@ -139,7 +145,7 @@ static Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Tran
     return Mesh{std::move(indices), attrib, transform, materialIndex, minB, maxB};
 }
 
-glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
+inline glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
 {
     return glm::vec3(
         attrib.vertices[3 * idx.vertex_index + 0],
@@ -147,7 +153,7 @@ glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
         attrib.vertices[3 * idx.vertex_index + 2]);
 }
 
-glm::vec3 nrm(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
+inline glm::vec3 nrm(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
 {
     if (idx.normal_index < 0)
         return glm::vec3(0, 1, 0);
@@ -180,13 +186,14 @@ static void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &out
 
             GPUTriangle tri;
 
-            tri.v0 = model * glm::vec4(pos(ind[0], attrib), 1.0f);
-            tri.v1 = model * glm::vec4(pos(ind[1], attrib), 1.0f);
-            tri.v2 = model * glm::vec4(pos(ind[2], attrib), 1.0f);
+            tri.a = model * glm::vec4(pos(ind[0], attrib), 1.0f);
+            tri.b = model * glm::vec4(pos(ind[1], attrib), 1.0f);
+            tri.c = model * glm::vec4(pos(ind[2], attrib), 1.0f);
 
-            tri.n0 = glm::vec4(normalMatrix * nrm(ind[0], attrib), 0.0f);
-            tri.n1 = glm::vec4(normalMatrix * nrm(ind[1], attrib), 0.0f);
-            tri.n2 = glm::vec4(normalMatrix * nrm(ind[2], attrib), 0.0f);
+            tri.materialIdx = mesh.materialIdx;
+            tri.pad0 = 0;
+            tri.pad1 = 0;
+
             outTriangles.push_back(tri);
         }
 
