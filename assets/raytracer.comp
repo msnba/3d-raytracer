@@ -1,6 +1,6 @@
 #version 430
 
-layout(local_size_x = 8, local_size_y = 8) in;
+layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D accumImage;
 
 //-- Data --
@@ -86,6 +86,8 @@ layout(std140, binding = 4) buffer Data {
     SceneData sceneData;
 };
 
+// shared BVHNode shNodes[8];
+
 // -- Functions --
 
 Collision raySphere(Ray ray, Sphere s){
@@ -133,12 +135,20 @@ Collision rayTriangle(Ray ray, Triangle tri){
     vec3 edge2 = tri.c.xyz - tri.a.xyz;
     vec3 normalVec = cross(edge1, edge2);
     float det = -dot(ray.direction, normalVec);
+    if(det < 1E-6) return c;
+
     float invdet = 1.0f/det;
     vec3 ao = ray.origin - tri.a.xyz;
     vec3 dao = cross(ao, ray.direction);
     float u = dot(edge2, dao) * invdet;
+    if(u < 0.0 || u > 1.0) return c;
+
     float v = -dot(edge1, dao) * invdet;
+    if(v < 0.0 || u + v > 1.0) return c;
+
     float dist = dot(ao, normalVec) * invdet;
+    if(dist < 0.0) return c;
+
     float w = 1 - u - v;
 
     c.didHit = (det>=1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0) ? 1 : 0;
@@ -150,14 +160,16 @@ Collision rayTriangle(Ray ray, Triangle tri){
     return c;
 }
 
-Collision rayBVH(Ray ray){
+Collision rayBVH(Ray ray, out uint triangleTests){
     Collision closest;
     closest.didHit = 0;
     closest.distance = 1e30;
 
-    uint stack[32];
+    uint stack[64];
     uint stackPtr = 0;
     stack[stackPtr++] = 0;
+
+    triangleTests = 0;
 
     while(stackPtr > 0){
         uint idx = stack[--stackPtr];
@@ -167,24 +179,22 @@ Collision rayBVH(Ray ray){
 
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
+                triangleTests++;
                 uint triangleIdx = node.leftFirst + i;
                 Collision c = rayTriangle(ray, triangles[triangleIdx]);
                 if(c.didHit == 1 && c.distance < closest.distance)
                     closest = c;
             }
         }else{
-            if (stackPtr + 2 <= 32) {
-                stack[stackPtr++] = node.leftFirst;
-                stack[stackPtr++] = node.leftFirst + 1;
-                continue;
-            }
+            stack[stackPtr++] = node.leftFirst;
+            stack[stackPtr++] = node.leftFirst + 1;
         }
     }
 
     return closest;
 }
 
-Collision calculateRayCollision(Ray ray)
+Collision calculateRayCollision(Ray ray, out uint triangleTests)
 {
     Collision closest;
     closest.didHit = 0;
@@ -197,7 +207,7 @@ Collision calculateRayCollision(Ray ray)
             closest = current;
     }
 
-    Collision triCollision = rayBVH(ray);
+    Collision triCollision = rayBVH(ray, triangleTests);
     if(triCollision.didHit == 1 && triCollision.distance < closest.distance)
         closest = triCollision;
 
@@ -243,12 +253,20 @@ vec3 ambient(Ray ray){
     return vec3(0.01);
 }
 
-vec3 trace(Ray ray, inout uint rng){
+vec3 trace(Ray ray, inout uint rng, out uint triangleTests){
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1.0f);
 
+    triangleTests = 0;
+
     for(int i=0; i <= sceneData.maxBounce; i++){
-        Collision collision = calculateRayCollision(ray);
+        uint triTests = 0;
+        Collision collision = calculateRayCollision(ray, triTests);
+
+        if(i == 0) {
+            triangleTests = triTests;
+        }
+
         if(collision.didHit == 0){
             incomingLight += ambient(ray);
             break;
@@ -259,13 +277,14 @@ vec3 trace(Ray ray, inout uint rng){
         vec3 specularDir = reflect(ray.direction, collision.normal);
 
         ray.direction = normalize(mix(diffuseDir, specularDir, collision.material.smoothness));
+        ray.invDir = 1.0 / ray.direction;  
         incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
 
         rayColor *= collision.material.color.rgb;
 
-        // russian roulette
+        //russian roulette
         float p = max(rayColor.r, max(rayColor.g, rayColor.b));
-        if (i > 0){
+        if (i > 3){
             p = clamp(p, 0.05, 0.95);
 
             if(randomFloat(rng) > p) break;
@@ -286,6 +305,15 @@ uint hash(uint x) {
 
 void main()
 {
+    // uint localIndex = gl_LocalInvocationIndex;
+    // if(localIndex < 8) {
+    //     shNodes[localIndex] = nodes[localIndex];
+    // }
+
+    // barrier();
+    // memoryBarrierShared();
+
+
     uvec2 pixel = gl_GlobalInvocationID.xy;
     if (pixel.x >= uint(resolution.x) || pixel.y >= uint(resolution.y))
         return;
@@ -312,11 +340,17 @@ void main()
     ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);
+    uint totalTriTests = 0;
     for (int i = 0; i < int(sceneData.numRaysPerPixel); i++) {
-        rng = uint(randomFloat(rng) * 4294967295.0);
-        totalLight += trace(ray, rng);
+        uint triTests;
+        totalLight += trace(ray, rng, triTests);
+        totalTriTests += triTests;
     }
     totalLight /= sceneData.numRaysPerPixel;
+
+    float avgTriTests = float(totalTriTests) / float(sceneData.numRaysPerPixel);
+
+    // totalLight = vec3(avgTriTests / 10000.0, 0.0, 0.0);
 
     if (frameIndex == 0) {
         imageStore(accumImage, ivec2(pixel), vec4(totalLight, 1.0));

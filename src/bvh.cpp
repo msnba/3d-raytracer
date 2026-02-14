@@ -16,16 +16,24 @@ BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
     nodes.push_back(node);
 
     split(0);
+
+    std::cout << "bvh built with: " << nodes.size() << " nodes\n";
 }
 
 void BVH::split(const uint32_t nodeIndex, const int depth)
 {
     GPUNode &node = nodes[nodeIndex];
+
     if (depth == MAX_DEPTH || node.triangleCount <= LEAF_TRIANGLES)
         return;
 
-    glm::vec3 size = glm::vec3(node.max - node.min);
-    int splitAxis = (size.x > size.y && size.x > size.z) ? 0 : (size.y > size.z ? 1 : 2);
+    glm::vec3 size = node.max - node.min;
+    int splitAxis = 0;
+    if (size.y > size.x && size.y > size.z)
+        splitAxis = 1;
+    else if (size.z > size.x && size.z > size.y)
+        splitAxis = 2;
+
     float splitPos = (node.min[splitAxis] + node.max[splitAxis]) * 0.5f;
 
     uint32_t begin = node.leftFirst;
@@ -38,14 +46,50 @@ void BVH::split(const uint32_t nodeIndex, const int depth)
         float center = (t.a[splitAxis] + t.b[splitAxis] + t.c[splitAxis]) / 3.0f;
 
         if (center < splitPos)
-            std::swap(triangles[i], triangles[mid++]);
+        {
+            std::swap(triangles[i], triangles[mid]);
+            mid++;
+        }
     }
 
     uint32_t leftCount = mid - begin;
     uint32_t rightCount = end - mid;
 
     if (leftCount == 0 || rightCount == 0)
-        return;
+    {
+        float avgCenter = 0.0f;
+        for (uint32_t i = begin; i < end; i++)
+        {
+            const GPUTriangle &t = triangles[i];
+            avgCenter += (t.a[splitAxis] + t.b[splitAxis] + t.c[splitAxis]) / 3.0f;
+        }
+        avgCenter /= node.triangleCount;
+
+        splitPos = avgCenter;
+        mid = begin;
+
+        for (uint32_t i = begin; i < end; i++)
+        {
+            const GPUTriangle &t = triangles[i];
+            float center = (t.a[splitAxis] + t.b[splitAxis] + t.c[splitAxis]) / 3.0f;
+
+            if (center < splitPos)
+            {
+                std::swap(triangles[i], triangles[mid]);
+                mid++;
+            }
+        }
+
+        leftCount = mid - begin;
+        rightCount = end - mid;
+
+        if (leftCount == 0 || rightCount == 0)
+        {
+            mid = begin + node.triangleCount / 2;
+            leftCount = mid - begin;
+            rightCount = end - mid;
+        }
+    }
 
     uint32_t leftIdx = nodes.size();
     nodes.emplace_back();

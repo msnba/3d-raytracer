@@ -4,8 +4,9 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 
 ## Screenshots
 
-<div align="center">
-  <img src="gh_assets/mirrortest.png" alt="Mirror Test w/ Spheres" width="50%">
+<div align="center" style="display: flex; gap: 2%; width: 100%;">
+  <img src="gh_assets/mirrortest.png" alt="Mirror Test w/ Spheres" style="width: 50%; height: auto;">
+  <img src="gh_assets/colortest.png" alt="Color Test w/ Spheres" style="width: 50%; height: auto;">
 </div>
 
 ## Prerequisites 📝

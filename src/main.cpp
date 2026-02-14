@@ -22,7 +22,7 @@ float lastFrame = 0.0f;
 float fps = 0.0f;
 
 // Camera camera(90.0f, 6.0f); // fov, speed
-Camera camera(90.0f, 6.0f, 0.0f, -10.0f, glm::vec3(-5, 4, 0));
+Camera camera(90.0f, 6.0f, 0.0f, -89.0f, glm::vec3(5.5, 11, 0));
 bool cameraDirty = true; // dictates when the frame clears so there isn't smudging
 
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
@@ -38,7 +38,6 @@ int main()
     glDisable(GL_BLEND);
 
     // -- Shader --
-    // Shader raytracer("assets/raytracer.vert", "assets/raytracer.frag", ShaderType::PATH);
     Shader pass("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
     Shader raytracer("assets/raytracer.comp");
 
@@ -67,14 +66,18 @@ int main()
     // scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {1.f, 0.f, 0.f, 0.f}});
     // scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
     // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
+    // scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
 
-    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{10.f, 2.f, 0.f}, {}, glm::vec3(5)}, scene.materials));
+    // scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{10.f, 2.f, 0.f}, {}, glm::vec3(5)}, scene.materials));
 
     scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {20, .5f, 20}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
-    scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{3, 1.5, -1.25f}, 1.0f, {0.f, 1.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    scene.spheres.push_back({{8, 1.5, 0.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
+    scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 1.f, 1.f}});
+    scene.spheres.push_back({{3, 1.5, -1.25f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {0.f, 1.f, 0.f, 1.f}});
+    scene.spheres.push_back({{5.75, 1.5, 2.75f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 1.f, 1.f}});
+    scene.spheres.push_back({{5.75, 1.5, -2.75f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 0.f, 1.f}});
+    scene.spheres.push_back({{8, 1.5, 0.f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 0.f, 1.f}});
+    
+    scene.spheres.push_back({{5.5, 1.5, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.0f}});
 
     // -- SSBO's --
     uint32_t meshCount = scene.meshes.size();
@@ -192,7 +195,7 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(SCR_WIDTH / 20.0f, SCR_HEIGHT / 30.0f), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(SCR_WIDTH, SCR_HEIGHT / 30.0f), ImGuiCond_Always);
         ImGui::Begin("Stats Panel", nullptr,
                      ImGuiWindowFlags_NoResize |
                          ImGuiWindowFlags_NoMove |
@@ -225,8 +228,8 @@ int main()
             sphereCount);
 
         glDispatchCompute(
-            (SCR_WIDTH + 7) / 8,
-            (SCR_HEIGHT + 7) / 8,
+            (SCR_WIDTH + 7) / 16,
+            (SCR_HEIGHT + 7) / 16,
             1);
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // used for shared frames
