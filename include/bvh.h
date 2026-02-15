@@ -14,10 +14,12 @@ struct BVH
 
     struct GPUNode
     {
-        glm::vec3 min;
-        uint32_t leftFirst; // index of left child OR first triangle
-        glm::vec3 max;
+        glm::vec4 min;
+        glm::vec4 max;
+        uint32_t left;
+        uint32_t right;
         uint32_t triangleCount; // 0 = interior, >0 = leaf
+        uint32_t pad;
     };
 
     std::vector<GPUNode> nodes;

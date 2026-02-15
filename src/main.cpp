@@ -11,24 +11,22 @@
 #include "object.h"
 #include "bvh.h"
 
-void mouseInput(GLFWwindow *window, double xposd, double yposd);
-void getInput(GLFWwindow *window);
-
-const unsigned int SCR_WIDTH = 1440;
-const unsigned int SCR_HEIGHT = 1080;
+#define SCR_WIDTH 1440
+#define SCR_HEIGHT 1080
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float fps = 0.0f;
 
-// Camera camera(90.0f, 6.0f); // fov, speed
-Camera camera(90.0f, 6.0f, 0.0f, -89.0f, glm::vec3(5.5, 11, 0));
-bool cameraDirty = true; // dictates when the frame clears so there isn't smudging
+Camera camera(90.0f, 6.0f, 0.0f, -30.0f, glm::vec3(-2, 6, 0)); // TODO: Implement fov.
 
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
 uint32_t frameIndex = 0;
 
-GLuint *gAccumFBO = nullptr;
+Scene scene;
+
+void mouseInput(GLFWwindow *window, double xposd, double yposd);
+void getInput(GLFWwindow *window);
 
 int main()
 {
@@ -49,41 +47,45 @@ int main()
                     1.f, -1.f,
                     1.f, 1.f};
 
-    unsigned int VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    unsigned int quadVBO, quadVAO;
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
 
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
     // -- Object Instantiation --
-    Scene scene;
+    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene.materials));
+    scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
 
-    // scene.spheres.push_back({{2.f, 1.f, -9.f}, 1.0f, {0.f, 0.f, 1.f}, 1.f, {1.f, 0.f, 0.f, 0.f}});
-    // scene.spheres.push_back({{5.0f, 0.5f, -8.f}, 1.0f, {1.f, 0.f, 0.f}, 1.f, {0.f, 0.f, 0.f, 0.f}});
-    // scene.spheres.push_back({{2.f, -15.0f, -10.f}, 15.0f, {1.f, 0.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}});
-    // scene.spheres.push_back({{-15.f, 15.0f, 0.f}, 7.5f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 1.f, 5.f}});
+    { // creates a circle of spheres in a color wheel
+        int sides = 6;
+        float radius = 3.f;
+        float origin[2] = {5.5, 0.0};
+        for (int i = 0; i < sides; i++)
+        {
+            float angle = 2.0f * M_PI * i / sides + M_PI / 2.0f;
 
-    // scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{10.f, 2.f, 0.f}, {}, glm::vec3(5)}, scene.materials));
+            float r = 0.5f + 0.5f * sin(angle);
+            float g = 0.5f + 0.5f * sin(angle + 2.0f * M_PI / 3.0f);
+            float b = 0.5f + 0.5f * sin(angle + 4.0f * M_PI / 3.0f);
 
-    scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {20, .5f, 20}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
-    scene.spheres.push_back({{3, 1.5, 1.25f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {0.f, 0.f, 1.f, 1.f}});
-    scene.spheres.push_back({{3, 1.5, -1.25f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {0.f, 1.f, 0.f, 1.f}});
-    scene.spheres.push_back({{5.75, 1.5, 2.75f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 1.f, 1.f}});
-    scene.spheres.push_back({{5.75, 1.5, -2.75f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 1.f, 0.f, 1.f}});
-    scene.spheres.push_back({{8, 1.5, 0.f}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {1.f, 0.f, 0.f, 1.f}});
-    
-    scene.spheres.push_back({{5.5, 1.5, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.0f}});
+            // x (up), y, z (right)
+            scene.spheres.push_back({{radius * sin(angle) + origin[0], 1.5, radius * cos(angle) + origin[1]}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {r, g, b, 1.f}});
+        }
+    }
+
+    // scene.spheres.push_back({{5.5, 1.5, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.0f}});
 
     // -- SSBO's --
     uint32_t meshCount = scene.meshes.size();
     uint32_t sphereCount = scene.spheres.size();
 
-    GLuint sphereSSBO;
+    unsigned int sphereSSBO;
     glGenBuffers(1, &sphereSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO);
     glBufferData(
@@ -93,7 +95,7 @@ int main()
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO);
 
-    GLuint matSSBO;
+    unsigned int matSSBO;
     glGenBuffers(1, &matSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO);
     glBufferData(
@@ -107,9 +109,9 @@ int main()
     std::vector<GPUMesh> gpuMeshes;
     convertToGPUMeshes(scene, triangles, gpuMeshes);
 
-    BVH bvh(triangles); // reorders the triangles
+    BVH bvh(triangles); // bvh's the triangles
 
-    GLuint triSSBO;
+    unsigned int triSSBO;
     glGenBuffers(1, &triSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
     glBufferData(
@@ -119,7 +121,7 @@ int main()
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO);
 
-    GLuint bvhSSBO;
+    unsigned int bvhSSBO;
     glGenBuffers(1, &bvhSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO);
     glBufferData(
@@ -135,7 +137,7 @@ int main()
         uint32_t numRaysPerPixel;
     } sceneData{5, 1}; // maxBounce, numRaysPerPixel
 
-    GLuint dataSSBO;
+    unsigned int dataSSBO;
     glGenBuffers(1, &dataSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, dataSSBO);
     glBufferData(
@@ -147,7 +149,7 @@ int main()
 
     // -- Frame Accumulation --
 
-    GLuint accumTex;
+    unsigned int accumTex;
     glGenTextures(1, &accumTex);
     glBindTexture(GL_TEXTURE_2D, accumTex);
     glTexImage2D(
@@ -173,22 +175,17 @@ int main()
         GL_READ_WRITE,
         GL_RGBA32F);
 
+    // -- Render Loop --
     while (!glfwWindowShouldClose(window.window))
     {
         glfwPollEvents();
 
-        float currentFrame = static_cast<float>(glfwGetTime());
+        float currentFrame = (float)glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         fps = 1.0f / deltaTime;
 
         getInput(window.window);
-
-        if (cameraDirty)
-        {
-            frameIndex = 0;
-            cameraDirty = false;
-        }
 
         // imgui stuff
         ImGui_ImplOpenGL3_NewFrame();
@@ -203,14 +200,9 @@ int main()
                          ImGuiWindowFlags_AlwaysAutoResize);
 
         ImGui::Text("FPS: %.0f", fps);
-        // ImGui::Text("%u", frameIndex);
-        // ImGui::Text("%f0 %f1 %f2", camera.cameraPos[0], camera.cameraPos[1], camera.cameraPos[2]);
-        // ImGui::Text("%.0f", camera.pitch);
-        // ImGui::Text("%.0f", camera.yaw);
-        // ImGui::Text("DT: %.3f", deltaTime);
         ImGui::End();
 
-        // start compute
+        // compute
         glUseProgram(raytracer.ID);
 
         glUniform1ui(
@@ -221,7 +213,6 @@ int main()
         raytracer.setVec3("cameraFront", camera.cameraFront);
         raytracer.setVec3("cameraUp", camera.cameraUp);
         raytracer.setFloat("fov", camera.fov);
-        raytracer.setVec2("resolution", glm::vec2(SCR_WIDTH, SCR_HEIGHT));
 
         glUniform1ui(
             glGetUniformLocation(raytracer.ID, "sphereCount"),
@@ -232,7 +223,7 @@ int main()
             (SCR_HEIGHT + 7) / 16,
             1);
 
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // used for shared frames
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // needed for shared frames
 
         // start draw
         ImGui::Render();
@@ -246,7 +237,7 @@ int main()
         glBindTexture(GL_TEXTURE_2D, accumTex);
         glUniform1i(glGetUniformLocation(pass.ID, "accumTex"), 0);
 
-        glBindVertexArray(VAO);
+        glBindVertexArray(quadVAO);
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         frameIndex++; // * Comment out to disable accumulation
@@ -255,8 +246,8 @@ int main()
         glfwSwapBuffers(window.window);
     }
 
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &quadVAO);
+    glDeleteBuffers(1, &quadVBO);
     glDeleteProgram(raytracer.ID);
 
     return 0;
@@ -275,7 +266,7 @@ void mouseInput(GLFWwindow *window, double xposd, double yposd)
     lastX = xpos;
     lastY = ypos;
 
-    float sensitivity = 0.1f; // change this value to your liking
+    const float sensitivity = 0.1f; // change this value to your liking
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
@@ -292,7 +283,7 @@ void mouseInput(GLFWwindow *window, double xposd, double yposd)
     camera.normalize();
 
     if (xoffset != 0.0f || yoffset != 0.0f)
-        cameraDirty = true;
+        frameIndex = 0;
 }
 
 void getInput(GLFWwindow *window)
@@ -309,7 +300,5 @@ void getInput(GLFWwindow *window)
     if (camera.cameraPos != oldPos ||
         camera.yaw != oldYaw ||
         camera.pitch != oldPitch)
-    {
-        cameraDirty = true;
-    }
+        frameIndex = 0;
 }

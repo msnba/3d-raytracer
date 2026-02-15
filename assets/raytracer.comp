@@ -4,7 +4,7 @@ layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D accumImage;
 
 //-- Data --
-uniform vec2 resolution;
+vec2 resolution = imageSize(accumImage);
 uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
@@ -53,10 +53,12 @@ struct Sphere {
 };
 
 struct BVHNode {
-    vec3 min;
-    uint leftFirst; // index of left child OR first triangle
-    vec3 max;
+    vec4 min;
+    vec4 max;
+    uint left;
+    uint right;
     uint triangleCount; // 0 = interior, >0 = leaf
+    uint pad;
 };
 
 // -- SSBOs --
@@ -160,7 +162,7 @@ Collision rayTriangle(Ray ray, Triangle tri){
     return c;
 }
 
-Collision rayBVH(Ray ray, out uint triangleTests){
+Collision rayBVH(Ray ray){
     Collision closest;
     closest.didHit = 0;
     closest.distance = 1e30;
@@ -169,32 +171,38 @@ Collision rayBVH(Ray ray, out uint triangleTests){
     uint stackPtr = 0;
     stack[stackPtr++] = 0;
 
-    triangleTests = 0;
-
     while(stackPtr > 0){
         uint idx = stack[--stackPtr];
         BVHNode node = nodes[idx];
 
-        if(!rayAABB(ray, node.min, node.max, closest.distance)) continue;
+        if(!rayAABB(ray, node.min.xyz, node.max.xyz, closest.distance)) continue;
 
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
-                triangleTests++;
-                uint triangleIdx = node.leftFirst + i;
+                uint triangleIdx = node.left + i;
                 Collision c = rayTriangle(ray, triangles[triangleIdx]);
                 if(c.didHit == 1 && c.distance < closest.distance)
                     closest = c;
             }
         }else{
-            stack[stackPtr++] = node.leftFirst;
-            stack[stackPtr++] = node.leftFirst + 1;
-        }
+    BVHNode leftNode  = nodes[node.left];
+    BVHNode rightNode = nodes[node.right];
+
+    bool hitLeft  = rayAABB(ray, leftNode.min.xyz,  leftNode.max.xyz,  closest.distance);
+    bool hitRight = rayAABB(ray, rightNode.min.xyz, rightNode.max.xyz, closest.distance);
+
+    if(hitLeft && stackPtr < 64)
+        stack[stackPtr++] = node.left;
+
+    if(hitRight && stackPtr < 64)
+        stack[stackPtr++] = node.right;
+}
     }
 
     return closest;
 }
 
-Collision calculateRayCollision(Ray ray, out uint triangleTests)
+Collision calculateRayCollision(Ray ray)
 {
     Collision closest;
     closest.didHit = 0;
@@ -207,7 +215,7 @@ Collision calculateRayCollision(Ray ray, out uint triangleTests)
             closest = current;
     }
 
-    Collision triCollision = rayBVH(ray, triangleTests);
+    Collision triCollision = rayBVH(ray);
     if(triCollision.didHit == 1 && triCollision.distance < closest.distance)
         closest = triCollision;
 
@@ -253,19 +261,12 @@ vec3 ambient(Ray ray){
     return vec3(0.01);
 }
 
-vec3 trace(Ray ray, inout uint rng, out uint triangleTests){
+vec3 trace(Ray ray, inout uint rng){
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1.0f);
 
-    triangleTests = 0;
-
     for(int i=0; i <= sceneData.maxBounce; i++){
-        uint triTests = 0;
-        Collision collision = calculateRayCollision(ray, triTests);
-
-        if(i == 0) {
-            triangleTests = triTests;
-        }
+        Collision collision = calculateRayCollision(ray);
 
         if(collision.didHit == 0){
             incomingLight += ambient(ray);
@@ -313,7 +314,7 @@ void main()
     // barrier();
     // memoryBarrierShared();
 
-
+    uvec2 size = imageSize(accumImage);
     uvec2 pixel = gl_GlobalInvocationID.xy;
     if (pixel.x >= uint(resolution.x) || pixel.y >= uint(resolution.y))
         return;
@@ -340,17 +341,10 @@ void main()
     ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);
-    uint totalTriTests = 0;
     for (int i = 0; i < int(sceneData.numRaysPerPixel); i++) {
-        uint triTests;
-        totalLight += trace(ray, rng, triTests);
-        totalTriTests += triTests;
+        totalLight += trace(ray, rng);
     }
     totalLight /= sceneData.numRaysPerPixel;
-
-    float avgTriTests = float(totalTriTests) / float(sceneData.numRaysPerPixel);
-
-    // totalLight = vec3(avgTriTests / 10000.0, 0.0, 0.0);
 
     if (frameIndex == 0) {
         imageStore(accumImage, ivec2(pixel), vec4(totalLight, 1.0));
