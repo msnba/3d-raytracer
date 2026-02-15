@@ -88,8 +88,6 @@ layout(std140, binding = 4) buffer Data {
     SceneData sceneData;
 };
 
-// shared BVHNode shNodes[8];
-
 // -- Functions --
 
 Collision raySphere(Ray ray, Sphere s){
@@ -175,8 +173,6 @@ Collision rayBVH(Ray ray){
         uint idx = stack[--stackPtr];
         BVHNode node = nodes[idx];
 
-        if(!rayAABB(ray, node.min.xyz, node.max.xyz, closest.distance)) continue;
-
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
                 uint triangleIdx = node.left + i;
@@ -185,19 +181,19 @@ Collision rayBVH(Ray ray){
                     closest = c;
             }
         }else{
-    BVHNode leftNode  = nodes[node.left];
-    BVHNode rightNode = nodes[node.right];
+            BVHNode leftNode  = nodes[node.left];
+            BVHNode rightNode = nodes[node.right];
 
-    bool hitLeft  = rayAABB(ray, leftNode.min.xyz,  leftNode.max.xyz,  closest.distance);
-    bool hitRight = rayAABB(ray, rightNode.min.xyz, rightNode.max.xyz, closest.distance);
+            bool hitLeft  = rayAABB(ray, leftNode.min.xyz,  leftNode.max.xyz,  closest.distance);
+            bool hitRight = rayAABB(ray, rightNode.min.xyz, rightNode.max.xyz, closest.distance);
 
-    if(hitLeft && stackPtr < 64)
-        stack[stackPtr++] = node.left;
+            if(hitLeft && stackPtr < 64)
+                stack[stackPtr++] = node.left;
 
-    if(hitRight && stackPtr < 64)
-        stack[stackPtr++] = node.right;
-}
-    }
+            if(hitRight && stackPtr < 64)
+                stack[stackPtr++] = node.right;
+            }
+        }
 
     return closest;
 }
@@ -258,7 +254,7 @@ vec3 cosineHemisphereDirection(vec3 normal, inout uint rng){ // removes diffuse 
 
 vec3 ambient(Ray ray){
     // this can be over-complicated later
-    return vec3(0.01);
+    return vec3(0);
 }
 
 vec3 trace(Ray ray, inout uint rng){
@@ -266,6 +262,8 @@ vec3 trace(Ray ray, inout uint rng){
     vec3 rayColor = vec3(1.0f);
 
     for(int i=0; i <= sceneData.maxBounce; i++){
+        if(max(rayColor.r, max(rayColor.g, rayColor.b)) < 0.0001) break;
+
         Collision collision = calculateRayCollision(ray);
 
         if(collision.didHit == 0){
@@ -277,15 +275,14 @@ vec3 trace(Ray ray, inout uint rng){
         vec3 diffuseDir = cosineHemisphereDirection(collision.normal, rng);
         vec3 specularDir = reflect(ray.direction, collision.normal);
 
-        ray.direction = normalize(mix(diffuseDir, specularDir, collision.material.smoothness));
-        ray.invDir = 1.0 / ray.direction;  
+        ray.direction = mix(diffuseDir, specularDir, collision.material.smoothness);
         incomingLight += collision.material.emission.rgb * collision.material.emission.a * rayColor;
 
         rayColor *= collision.material.color.rgb;
 
         //russian roulette
         float p = max(rayColor.r, max(rayColor.g, rayColor.b));
-        if (i > 3){
+        if (i > 2){
             p = clamp(p, 0.05, 0.95);
 
             if(randomFloat(rng) > p) break;
@@ -331,13 +328,7 @@ void main()
 
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(
-        cameraPos +
-        forward +
-        screen.x * right +
-        screen.y * up -
-        cameraPos
-    );
+    ray.direction = normalize(forward + screen.x * right + screen.y * up);
     ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);

@@ -8,6 +8,16 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
   <img src="gh_assets/mirrortest.png" width="49%" />
   <img src="gh_assets/colortest.png" width="49%" />
 </p>
+<p align="center">
+  <img src="gh_assets/modeltest.png" width="50%" />
+</p>
+
+## Features ✅
+
+- Real-time Monte Carlo path tracing.
+- Ability to load .obj model files.
+- Accumulates frames over time for a more realistic picture.
+- Helpful user interface.
 
 ## Prerequisites 📝
 

@@ -18,7 +18,7 @@ float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 float fps = 0.0f;
 
-Camera camera(90.0f, 6.0f, 0.0f, -30.0f, glm::vec3(-2, 6, 0)); // TODO: Implement fov.
+Camera camera(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0)); // TODO: Implement fov.
 
 Window window(SCR_WIDTH, SCR_HEIGHT, "Window");
 uint32_t frameIndex = 0;
@@ -39,7 +39,7 @@ int main()
     Shader pass("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
     Shader raytracer("assets/raytracer.comp");
 
-    float quad[] = {// using a quad so fragment shader runs over every pixel on the screen
+    float quad[] = {// using a quad so compute shader runs over every pixel on the screen
                     -1.f, -1.f,
                     1.f, -1.f,
                     -1.f, 1.f,
@@ -59,7 +59,8 @@ int main()
     glEnableVertexAttribArray(0);
 
     // -- Object Instantiation --
-    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene.materials));
+    scene.meshes.push_back(loadMesh("assets/models/dragon8k.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.1f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene.materials));
+    // scene.meshes.push_back(loadMesh("assets/models/teapot.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.1f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene.materials));
     scene.meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, scene));
 
     { // creates a circle of spheres in a color wheel
@@ -80,6 +81,7 @@ int main()
     }
 
     // scene.spheres.push_back({{5.5, 1.5, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.0f}});
+    scene.spheres.push_back({{5.5, 8, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {1.f, 1.f, 1.f, 1.0f}});
 
     // -- SSBO's --
     uint32_t meshCount = scene.meshes.size();
