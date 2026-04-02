@@ -118,8 +118,8 @@ int main()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        triangles.size() * sizeof(GPUTriangle),
-        triangles.data(),
+        bvh.triangles.size() * sizeof(GPUTriangle),
+        bvh.triangles.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO);
 
@@ -221,8 +221,8 @@ int main()
             sphereCount);
 
         glDispatchCompute(
-            (SCR_WIDTH + 7) / 16,
-            (SCR_HEIGHT + 7) / 16,
+            (SCR_WIDTH + 15) / 16,
+            (SCR_HEIGHT + 15) / 16,
             1);
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // needed for shared frames

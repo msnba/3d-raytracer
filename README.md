@@ -34,11 +34,9 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 2. CD into the new directory:
    - `cd ./3d-renderer`
 3. Allow execution of script:
-   - For Linux users: `chmod +x build_and_run.sh`
-   - For Windows users (Powershell): `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+   - `chmod +x build_and_run.sh`
 4. Run the script:
-   - For Linux users: `./build_and_run.sh`
-   - For Windows users (Powershell): `./build_and_run.ps1`
+   - `./build_and_run.sh`
 
 ## License
 

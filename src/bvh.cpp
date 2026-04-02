@@ -14,6 +14,7 @@ BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
     for (const GPUTriangle &tri : triangles)
         BVH::growToInclude(node, tri);
 
+    nodes.reserve(2 * triangles.size());
     nodes.push_back(node);
 
     split(0);
