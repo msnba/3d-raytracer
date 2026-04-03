@@ -57,7 +57,6 @@ else
         glfw3
         glm
         imgui
-        tinyobjloader
         opengl
     )
     warn "No vcpkg.json found. Installing common packages: ${VCPKG_PACKAGES[*]}"

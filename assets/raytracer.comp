@@ -9,8 +9,6 @@ uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
 
-uniform uint sphereCount;
-
 uniform uint frameIndex;
 
 // -- Structs --
@@ -131,27 +129,27 @@ Collision rayTriangle(Ray ray, Triangle tri){
     Collision c;
     c.didHit = 0;
 
+    const float EPSILON = 0.0; // Don't know why you would keep this above 0
+
     vec3 edge1 = tri.b.xyz - tri.a.xyz;
     vec3 edge2 = tri.c.xyz - tri.a.xyz;
     vec3 normalVec = cross(edge1, edge2);
     float det = -dot(ray.direction, normalVec);
-    if(det < 1E-6) return c;
+    if(abs(det) < EPSILON) return c;
 
     float invdet = 1.0f/det;
     vec3 ao = ray.origin - tri.a.xyz;
     vec3 dao = cross(ao, ray.direction);
     float u = dot(edge2, dao) * invdet;
-    if(u < 0.0 || u > 1.0) return c;
+    if(u < -EPSILON || u > 1.0 + EPSILON) return c;
 
     float v = -dot(edge1, dao) * invdet;
-    if(v < 0.0 || u + v > 1.0) return c;
+    if(v < -EPSILON || u + v > 1.0 + EPSILON) return c;
 
     float dist = dot(ao, normalVec) * invdet;
-    if(dist < 0.0) return c;
+    if(dist < EPSILON) return c;
 
-    float w = 1 - u - v;
-
-    c.didHit = (det>=1E-6 && dist >= 0 && u >= 0 && v >= 0 && w >= 0) ? 1 : 0;
+    c.didHit = 1;
     c.hitPoint = ray.origin + ray.direction * dist;
     c.normal = normalize(normalVec);
     c.distance = dist;
@@ -204,7 +202,7 @@ Collision calculateRayCollision(Ray ray)
     closest.didHit = 0;
     closest.distance = 1e30; // very large distance as a default
 
-    for(int i = 0; i < sphereCount; i++){
+    for(int i = 0; i < spheres.length(); i++){
         Collision current = raySphere(ray, spheres[i]);
 
         if(current.didHit == 1 && current.distance < closest.distance)

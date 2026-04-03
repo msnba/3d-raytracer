@@ -1,3 +1,10 @@
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <iostream>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
 #include "window.h"
 
 Window::Window(unsigned int width, unsigned int height, const char *title) : SCR_WIDTH(width), SCR_HEIGHT(height)
@@ -23,6 +30,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     }
 
     glfwMakeContextCurrent(window); // ! Window must be contextualized before GLAD initialization.
+    glfwSwapInterval(0);            // Turns off V-Sync
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -34,7 +42,6 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
