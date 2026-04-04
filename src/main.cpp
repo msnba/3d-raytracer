@@ -7,10 +7,12 @@
 #define SCR_WIDTH 1440
 #define SCR_HEIGHT 1080
 
+#define FULLSCREEN
+
 int main()
 {
-    std::unique_ptr<Camera> camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
     std::unique_ptr<Window> window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "Window");
+    std::unique_ptr<Camera> camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
     std::shared_ptr scene = std::make_shared<Scene>();
 
     // -- Object Instantiation --

@@ -5,7 +5,7 @@
 class Window
 {
 public:
-    const unsigned int SCR_WIDTH, SCR_HEIGHT;
+    unsigned int SCR_WIDTH, SCR_HEIGHT;
     GLFWwindow *window;
     Window(unsigned int width, unsigned int height, const char *title);
     ~Window();

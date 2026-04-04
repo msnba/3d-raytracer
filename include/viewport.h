@@ -26,29 +26,29 @@ private:
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
     static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
-    std::unique_ptr<Window> m_window;
-    std::unique_ptr<Camera> m_camera;
-    std::weak_ptr<const Scene> m_scene;
-    GLFWwindow *m_rawWindow = nullptr;
+    std::unique_ptr<Window> window_;
+    std::unique_ptr<Camera> camera_;
+    std::weak_ptr<const Scene> scene_;
+    GLFWwindow *rawWindow_ = nullptr;
 
-    Shader m_passthrough;
-    Shader m_raytrace;
+    Shader passthrough_;
+    Shader raytrace_;
 
-    unsigned int m_quadVBO = 0, m_quadVAO = 0;
-    unsigned int m_accumTexture = 0;
+    unsigned int quadVBO_ = 0, quadVAO_ = 0;
+    unsigned int accumTexture_ = 0;
 
-    unsigned int m_sphereSSBO = 0;
-    unsigned int m_matSSBO = 0;
-    unsigned int m_triSSBO = 0;
-    unsigned int m_bvhSSBO = 0;
-    unsigned int m_dataSSBO = 0;
+    unsigned int sphereSSBO_ = 0;
+    unsigned int matSSBO_ = 0;
+    unsigned int triSSBO_ = 0;
+    unsigned int bvhSSBO_ = 0;
+    unsigned int dataSSBO_ = 0;
 
-    uint32_t m_accumFrameIndex = 0;
-    float m_deltaTime = 0.0f;
-    float m_lastFrame = 0.0f;
+    uint32_t accumFrameIndex_ = 0;
+    float deltaTime_ = 0.0f;
+    float lastFrame_ = 0.0f;
 
-    float m_mouseLastX = 0.0f;
-    float m_mouseLastY = 0.0f;
+    float mouseLastX_ = 0.0f;
+    float mouseLastY_ = 0.0f;
 };
 
 #endif

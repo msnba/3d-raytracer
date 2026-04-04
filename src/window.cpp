@@ -1,13 +1,15 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include <iostream>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <stdexcept>
 
 #include "window.h"
 
-Window::Window(unsigned int width, unsigned int height, const char *title) : SCR_WIDTH(width), SCR_HEIGHT(height)
+#define FULLSCREEN
+
+Window::Window(unsigned int width, unsigned int height, const char *title)
 {
     if (!glfwInit())
         return;
@@ -20,13 +22,24 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    window = glfwCreateWindow(width, height, title, NULL, NULL);
+#ifdef FULLSCREEN
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode *mode = glfwGetVideoMode(monitor);
 
-    if (window == nullptr)
+    SCR_WIDTH = mode->width;
+    SCR_HEIGHT = mode->height;
+
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, title, monitor, NULL);
+#else
+    SCR_WIDTH = width;
+    SCR_HEIGHT = height;
+    window = glfwCreateWindow(width, height, title, NULL, NULL);
+#endif
+
+    if (!window)
     {
-        std::cerr << "Failed to initialize OpenGL Window\n";
         glfwTerminate();
-        return;
+        throw std::runtime_error("Failed to initialize OpenGL Window\n");
     }
 
     glfwMakeContextCurrent(window); // ! Window must be contextualized before GLAD initialization.
@@ -34,8 +47,8 @@ Window::Window(unsigned int width, unsigned int height, const char *title) : SCR
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
-        std::cerr << "Failed to initialize GLAD\n";
-        return;
+        glfwTerminate();
+        throw std::runtime_error("Failed to initialize GLAD\n");
     }
 
     // -- ImGUI --

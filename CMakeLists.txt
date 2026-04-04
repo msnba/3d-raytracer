@@ -1,12 +1,14 @@
-cmake_minimum_required(VERSION 3.10)
-
-project(engine CXX)
+cmake_minimum_required(VERSION 3.14)
+project(engine CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -17,12 +19,11 @@ file(GLOB_RECURSE SRC_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-include_directories(
+add_executable(engine ${SRC_SOURCES})
+
+target_include_directories(engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
-
-
-add_executable(engine ${SRC_SOURCES})
 
 target_link_libraries(engine PRIVATE
     glfw
