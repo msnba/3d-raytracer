@@ -16,6 +16,7 @@ void Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
 {
     float velocity = speed_ * deltaTime;
 
+    // movement
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         cameraPos_ += velocity * cameraFront_;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
@@ -50,6 +51,12 @@ void Camera::handleMouseInput(uint32_t &accumFrameIndex, float deltaTime, float 
 
     if (xoffset != 0.0f || yoffset != 0.0f)
         accumFrameIndex = 0;
+}
+
+void Camera::handleScrollInput(float xoffset, float yoffset)
+{
+    float sensitivity = 2.5f;
+    fov_ = std::min(std::max(fov_ - sensitivity * yoffset, 0.1f), 150.0f);
 }
 
 void Camera::normalize()

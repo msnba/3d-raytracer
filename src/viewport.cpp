@@ -27,6 +27,7 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
     glfwSetCursorPosCallback(m_rawWindow, Viewport::cursorPosCallback);
     glfwSetInputMode(m_rawWindow, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetScrollCallback(m_rawWindow, Viewport::scrollCallback);
     glDisable(GL_BLEND);
 
     m_passthrough = Shader("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
@@ -272,5 +273,16 @@ void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)
             static_cast<float>(yposd),
             instance->m_mouseLastX,
             instance->m_mouseLastY);
+    }
+}
+
+void Viewport::scrollCallback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    Viewport *instance = static_cast<Viewport *>(glfwGetWindowUserPointer(window));
+
+    if (instance)
+    {
+        instance->m_camera->handleScrollInput(xoffset, yoffset);
+        instance->m_accumFrameIndex = 0;
     }
 }

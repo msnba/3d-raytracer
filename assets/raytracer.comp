@@ -8,6 +8,7 @@ vec2 resolution = imageSize(accumImage);
 uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform vec3 cameraUp;
+uniform float fov;
 
 uniform uint frameIndex;
 
@@ -326,7 +327,7 @@ void main()
 
     Ray ray;
     ray.origin = cameraPos;
-    ray.direction = normalize(forward + screen.x * right + screen.y * up);
+    ray.direction = normalize(1.0/tan(radians(fov) * .5) * forward + screen.x * right + screen.y * up); //fov correction
     ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);

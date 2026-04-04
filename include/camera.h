@@ -16,6 +16,7 @@ public:
 
     void handleKeyInput(GLFWwindow *window, float deltaTime);
     void handleMouseInput(uint32_t &accumeFrameIndex, float deltaTime, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY);
+    void handleScrollInput(float xoffset, float yoffset);
 
 private:
     float fov_, speed_, yaw_, pitch_;

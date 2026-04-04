@@ -24,6 +24,7 @@ public:
 
 private:
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
+    static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
     std::unique_ptr<Window> m_window;
     std::unique_ptr<Camera> m_camera;
