@@ -42,6 +42,7 @@ jobs:
             ${{ runner.os }}-vcpkg-
 
       - name: Build Project
+        timeout-minutes: 5
         run: |
           cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake
           cmake --build build
