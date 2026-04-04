@@ -1,6 +1,8 @@
 # 3D-Raytracer
 
 _A simple cross-platform C++ 3D Raytracer using OpenGL_
+![Linux Build](https://github.com/YOUR_USERNAME/3d-renderer/actions/workflows/build.yml/badge.svg?branch=main&label=Linux)
+![Windows Build](https://github.com/YOUR_USERNAME/3d-renderer/actions/workflows/build.yml/badge.svg?branch=main&label=Windows)
 
 ## Screenshots
 
