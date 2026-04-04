@@ -13,7 +13,7 @@
 #include "viewport.h"
 #include "bvh.h"
 
-Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<const Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), scene_(scene)
+Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), scene_(scene)
 {
     if (!window_)
     {
@@ -33,8 +33,8 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     passthrough_ = Shader("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
     raytrace_ = Shader("assets/raytracer.comp");
 
-    mouseLastX_ = static_cast<float>(window_->SCR_WIDTH) / 2.0;
-    mouseLastY_ = static_cast<float>(window_->SCR_HEIGHT) / 2.0;
+    mouseLastX_ = static_cast<float>(window_->SCR_WIDTH) / 2.0f;
+    mouseLastY_ = static_cast<float>(window_->SCR_HEIGHT) / 2.0f;
 
     float quad[] = {
         -1.f, -1.f,
@@ -98,7 +98,7 @@ void Viewport::update()
     ImGui::Render();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, window_->SCR_WIDTH, window_->SCR_HEIGHT);
+    glViewport(0, 0, static_cast<GLsizei>(window_->SCR_WIDTH), static_cast<GLsizei>(window_->SCR_HEIGHT));
     glClear(GL_COLOR_BUFFER_BIT);
 
     glUseProgram(passthrough_.ID);
@@ -123,7 +123,7 @@ void Viewport::processGui()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(window_->SCR_WIDTH, window_->SCR_HEIGHT / 30.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(window_->SCR_WIDTH), static_cast<float>(window_->SCR_HEIGHT) / 30.0f), ImGuiCond_Always);
     ImGui::Begin("Stats Panel", nullptr,
                  ImGuiWindowFlags_NoResize |
                      ImGuiWindowFlags_NoMove |
@@ -153,7 +153,7 @@ void Viewport::processKeyInput()
 
 void Viewport::rebuildScene()
 {
-    std::shared_ptr<const Scene> pScene = scene_.lock();
+    std::shared_ptr<Scene> pScene = scene_.lock();
 
     if (!pScene)
     {
@@ -167,7 +167,7 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        pScene->spheres.size() * sizeof(GPUSphere),
+        static_cast<long int>(pScene->spheres.size() * sizeof(GPUSphere)),
         pScene->spheres.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
@@ -178,7 +178,7 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        pScene->materials.size() * sizeof(GPUMaterial),
+        static_cast<long int>(pScene->materials.size() * sizeof(GPUMaterial)),
         pScene->materials.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
@@ -195,7 +195,7 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        bvh.triangles.size() * sizeof(GPUTriangle),
+        static_cast<long int>(bvh.triangles.size() * sizeof(GPUTriangle)),
         bvh.triangles.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO_);
@@ -206,7 +206,7 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        bvh.nodes.size() * sizeof(BVH::GPUNode),
+        static_cast<long int>(bvh.nodes.size() * sizeof(BVH::GPUNode)),
         bvh.nodes.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
@@ -235,8 +235,8 @@ void Viewport::rebuildScene()
         GL_TEXTURE_2D,
         0,
         GL_RGBA32F,
-        window_->SCR_WIDTH,
-        window_->SCR_HEIGHT,
+        static_cast<GLsizei>(window_->SCR_WIDTH),
+        static_cast<GLsizei>(window_->SCR_HEIGHT),
         0,
         GL_RGBA,
         GL_FLOAT,
@@ -268,7 +268,6 @@ void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)
     {
         instance->camera_->handleMouseInput(
             instance->accumFrameIndex_,
-            instance->deltaTime_,
             static_cast<float>(xposd),
             static_cast<float>(yposd),
             instance->mouseLastX_,

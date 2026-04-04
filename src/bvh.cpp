@@ -1,3 +1,5 @@
+#include <limits>
+
 #include "bvh.h"
 
 BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
@@ -5,7 +7,7 @@ BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
     GPUNode node{};
     node.left = 0;
     node.right = 0;
-    node.triangleCount = triangles.size();
+    node.triangleCount = static_cast<uint32_t>(triangles.size());
 
     constexpr float numeric_max = std::numeric_limits<float>::max();
     node.min = glm::vec4(numeric_max);
@@ -22,7 +24,7 @@ BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
     std::cout << "bvh built with: " << nodes.size() << " nodes\n";
 }
 
-void BVH::split(const uint32_t nodeIndex, const int depth)
+void BVH::split(const uint32_t nodeIndex, const size_t depth)
 {
     GPUNode &node = nodes[nodeIndex];
 
@@ -62,7 +64,7 @@ void BVH::split(const uint32_t nodeIndex, const int depth)
     uint32_t leftCount = mid - begin;
     uint32_t rightCount = end - mid;
 
-    uint32_t leftIdx = nodes.size();
+    uint32_t leftIdx = static_cast<uint32_t>(nodes.size());
     nodes.emplace_back();
     nodes.emplace_back();
 
