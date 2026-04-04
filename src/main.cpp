@@ -1,15 +1,7 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h> // ! Must be included after GLAD (due to method overriding).
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 #include <vector>
 
-#include "camera.h"
-#include "shader.h"
-#include "window.h" //includes imgui imports
-#include "object.h"
-#include "bvh.h"
 #include "viewport.h"
 
 #define SCR_WIDTH 1440
@@ -23,7 +15,6 @@ int main()
 
     // -- Object Instantiation --
     scene->meshes.push_back(loadMesh("assets/models/dragon.obj", GPUMaterial{{1.f, 1.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene->materials));
-    // scene.meshes.push_back(loadMesh("assets/models/teapot.obj", GPUMaterial{{1.f, 1.f, 1.f}, 0.1f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene.materials));
     scene->meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, *scene));
 
     { // creates a circle of spheres in a color wheel
@@ -42,9 +33,6 @@ int main()
             scene->spheres.push_back({{radius * sin(angle) + origin[0], 1.5, radius * cos(angle) + origin[1]}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {r, g, b, 1.f}});
         }
     }
-
-    // scene.spheres.push_back({{5.5, 1.5, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {0.f, 0.f, 0.f, 0.0f}});
-    // scene.spheres.push_back({{5.5, 8, 0.f}, 1.0f, {1.f, 1.f, 1.f}, 0.f, {1.f, 1.f, 1.f, 1.0f}});
 
     Viewport viewport(std::move(window), std::move(camera), scene);
 

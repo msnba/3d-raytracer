@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <stdint.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -81,10 +82,10 @@ void Viewport::update()
         glGetUniformLocation(m_raytrace.ID, "frameIndex"),
         m_accumFrameIndex);
 
-    m_raytrace.setVec3("cameraPos", m_camera->cameraPos);
-    m_raytrace.setVec3("cameraFront", m_camera->cameraFront);
-    m_raytrace.setVec3("cameraUp", m_camera->cameraUp);
-    m_raytrace.setFloat("fov", m_camera->fov);
+    m_raytrace.setVec3("cameraPos", m_camera->cameraPos_);
+    m_raytrace.setVec3("cameraFront", m_camera->cameraFront_);
+    m_raytrace.setVec3("cameraUp", m_camera->cameraUp_);
+    m_raytrace.setFloat("fov", m_camera->fov_);
 
     glDispatchCompute(
         (m_window->SCR_WIDTH + 15) / 16,
@@ -137,15 +138,15 @@ void Viewport::processKeyInput()
     if (glfwGetKey(m_rawWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(m_rawWindow, true);
 
-    glm::vec3 oldPos = m_camera->cameraPos;
-    float oldYaw = m_camera->yaw;
-    float oldPitch = m_camera->pitch;
+    glm::vec3 oldPos = m_camera->cameraPos_;
+    float oldYaw = m_camera->yaw_;
+    float oldPitch = m_camera->pitch_;
 
-    m_camera->getInput(m_rawWindow, m_deltaTime);
+    m_camera->handleKeyInput(m_rawWindow, m_deltaTime);
 
-    if (m_camera->cameraPos != oldPos ||
-        m_camera->yaw != oldYaw ||
-        m_camera->pitch != oldPitch)
+    if (m_camera->cameraPos_ != oldPos ||
+        m_camera->yaw_ != oldYaw ||
+        m_camera->pitch_ != oldPitch)
         m_accumFrameIndex = 0;
 }
 
@@ -264,32 +265,12 @@ void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)
 
     if (instance)
     {
-        Camera *instanceCamera = instance->m_camera.get();
-
-        float xpos = static_cast<float>(xposd);
-        float ypos = static_cast<float>(yposd);
-
-        float xoffset = xpos - instance->m_mouseLastX;
-        float yoffset = instance->m_mouseLastY - ypos; // y coords go from bottom to top
-        instance->m_mouseLastX = xpos;
-        instance->m_mouseLastY = ypos;
-
-        const float sensitivity = 0.1f; // change this value to your liking
-        xoffset *= sensitivity;
-        yoffset *= sensitivity;
-
-        instanceCamera->yaw += xoffset;
-        instanceCamera->pitch += yoffset;
-
-        // anti flip
-        if (instanceCamera->pitch > 89.0f)
-            instanceCamera->pitch = 89.0f;
-        if (instanceCamera->pitch < -89.0f)
-            instanceCamera->pitch = -89.0f;
-
-        instanceCamera->normalize();
-
-        if (xoffset != 0.0f || yoffset != 0.0f)
-            instance->m_accumFrameIndex = 0;
+        instance->m_camera->handleMouseInput(
+            instance->m_accumFrameIndex,
+            instance->m_deltaTime,
+            static_cast<float>(xposd),
+            static_cast<float>(yposd),
+            instance->m_mouseLastX,
+            instance->m_mouseLastY);
     }
 }

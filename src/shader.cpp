@@ -1,3 +1,6 @@
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
 #include "shader.h"
 
 Shader::Shader(const char *vertexPath, const char *fragmentPath, ShaderType type)

@@ -1,66 +1,62 @@
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "camera.h"
 
-Camera::Camera(float fov, float speed)
+Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos) : fov_(fov), speed_(speed), cameraPos_(cameraPos), yaw_(yaw), pitch_(pitch)
 {
-    this->fov = fov;
-    this->speed = speed;
+    cameraFront_ = glm::vec3(0.0f, 0.0f, 1.0f);
+    cameraUp_ = glm::vec3(0.0f, 1.0f, 0.0f);
 
-    cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-    cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
-    cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    yaw = -90.0f; // a yaw of 0.0 results in a direction vector pointing to the right
-    pitch = 0.0f;
+    normalize();
 }
 
-Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos)
+void Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
 {
-    this->fov = fov;
-    this->speed = speed;
-
-    this->cameraPos = cameraPos;
-    this->cameraFront = glm::vec3(0.0f, 0.0f, 1.0f);
-    this->cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    this->yaw = yaw;
-    this->pitch = pitch;
-
-    Camera::normalize();
-}
-
-void Camera::getInput(GLFWwindow *window, float deltaTime)
-{
-    float velocity = speed * deltaTime;
+    float velocity = speed_ * deltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += velocity * cameraFront;
+        cameraPos_ += velocity * cameraFront_;
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= velocity * cameraFront;
+        cameraPos_ -= velocity * cameraFront_;
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * velocity;
+        cameraPos_ -= glm::normalize(glm::cross(cameraFront_, cameraUp_)) * velocity;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * velocity;
-    // if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-    //     cameraPos += velocity * cameraUp;
-    // if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
-    //     cameraPos -= velocity * cameraUp;
+        cameraPos_ += glm::normalize(glm::cross(cameraFront_, cameraUp_)) * velocity;
 }
 
-glm::mat4 Camera::getProjection(int SCR_WIDTH, int SCR_HEIGHT)
+void Camera::handleMouseInput(uint32_t &accumFrameIndex, float deltaTime, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)
 {
-    return glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
-}
+    float xoffset = mouseX - mouseLastX;
+    float yoffset = mouseLastY - mouseY; // y coords go from bottom to top
+    mouseLastX = mouseX;
+    mouseLastY = mouseY;
 
-glm::mat4 Camera::getView()
-{
-    return glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    const float sensitivity = 0.1f; // change this value to your liking
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
+
+    yaw_ += xoffset;
+    pitch_ += yoffset;
+
+    // anti flip
+    if (pitch_ > 89.0f)
+        pitch_ = 89.0f;
+    if (pitch_ < -89.0f)
+        pitch_ = -89.0f;
+
+    normalize();
+
+    if (xoffset != 0.0f || yoffset != 0.0f)
+        accumFrameIndex = 0;
 }
 
 void Camera::normalize()
 {
     glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
+    front.x = cos(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+    front.y = sin(glm::radians(pitch_));
+    front.z = sin(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+    cameraFront_ = glm::normalize(front);
 }

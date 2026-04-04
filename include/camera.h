@@ -1,24 +1,25 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <stdint.h>
+
+struct GLFWwindow;
 
 struct Camera
 {
-    float fov, speed, yaw, pitch;
-    glm::vec3 cameraPos, cameraFront, cameraUp;
+    friend class Viewport;
 
-    Camera(float fov = 60.0f, float speed = 5.0f);
-    Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos);
+public:
+    Camera() = default;
+    Camera(float fov = 60.0f, float speed = 5.0f, float yaw = -90.0f, float pitch = 0.0f, glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f));
 
-    void getInput(GLFWwindow *window, float deltaTime);
+    void handleKeyInput(GLFWwindow *window, float deltaTime);
+    void handleMouseInput(uint32_t &accumeFrameIndex, float deltaTime, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY);
 
-    glm::mat4 getProjection(int SCR_WIDTH, int SCR_HEIGHT);
-    glm::mat4 getView();
-
+private:
+    float fov_, speed_, yaw_, pitch_;
+    glm::vec3 cameraPos_, cameraFront_, cameraUp_;
     void normalize();
 };
 
