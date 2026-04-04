@@ -1,10 +1,11 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
 
 #include "camera.h"
 
-Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos) : fov_(fov), speed_(speed), cameraPos_(cameraPos), yaw_(yaw), pitch_(pitch)
+Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos) : fov_(fov), speed_(speed), yaw_(yaw), pitch_(pitch), cameraPos_(cameraPos)
 {
     cameraFront_ = glm::vec3(0.0f, 0.0f, 1.0f);
     cameraUp_ = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -27,7 +28,7 @@ void Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
         cameraPos_ += glm::normalize(glm::cross(cameraFront_, cameraUp_)) * velocity;
 }
 
-void Camera::handleMouseInput(uint32_t &accumFrameIndex, float deltaTime, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)
+void Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)
 {
     float xoffset = mouseX - mouseLastX;
     float yoffset = mouseLastY - mouseY; // y coords go from bottom to top
@@ -53,17 +54,19 @@ void Camera::handleMouseInput(uint32_t &accumFrameIndex, float deltaTime, float 
         accumFrameIndex = 0;
 }
 
-void Camera::handleScrollInput(float xoffset, float yoffset)
+void Camera::handleScrollInput(double xoffset, double yoffset)
 {
     float sensitivity = 2.5f;
-    fov_ = std::min(std::max(fov_ - sensitivity * yoffset, 0.1f), 150.0f);
+    fov_ = std::min(std::max(fov_ - sensitivity * static_cast<float>(yoffset), 0.1f), 150.0f);
+
+    (void)xoffset;
 }
 
 void Camera::normalize()
 {
     glm::vec3 front;
-    front.x = cos(glm::radians(yaw_)) * cos(glm::radians(pitch_));
-    front.y = sin(glm::radians(pitch_));
-    front.z = sin(glm::radians(yaw_)) * cos(glm::radians(pitch_));
+    front.x = cosf(glm::radians(yaw_)) * cosf(glm::radians(pitch_));
+    front.y = sinf(glm::radians(pitch_));
+    front.z = sinf(glm::radians(yaw_)) * cosf(glm::radians(pitch_));
     cameraFront_ = glm::normalize(front);
 }

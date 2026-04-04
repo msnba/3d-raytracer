@@ -11,7 +11,7 @@
 class Viewport
 {
 public:
-    Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<const Scene> scene_);
+    Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene_);
     ~Viewport();
 
     void update();
@@ -28,7 +28,7 @@ private:
 
     std::unique_ptr<Window> window_;
     std::unique_ptr<Camera> camera_;
-    std::weak_ptr<const Scene> scene_;
+    std::weak_ptr<Scene> scene_;
     GLFWwindow *rawWindow_ = nullptr;
 
     Shader passthrough_;

@@ -21,6 +21,19 @@ file(GLOB_RECURSE SRC_SOURCES
 
 add_executable(engine ${SRC_SOURCES})
 
+# Strict error checking for both platforms, warnings are treated as errors.
+if(MSVC)
+    target_compile_options(engine PRIVATE /W4 /permissive- /WX)
+else()
+    target_compile_options(engine PRIVATE 
+        -Wall -Wextra -Wpedantic -pedantic-errors -Werror
+        -Wvla 
+        -Wconversion
+        -Wfloat-conversion
+        -Wsign-conversion) 
+endif()
+
+
 target_include_directories(engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )

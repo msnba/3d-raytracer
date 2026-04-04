@@ -26,10 +26,13 @@ Window::Window(unsigned int width, unsigned int height, const char *title)
     GLFWmonitor *monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode *mode = glfwGetVideoMode(monitor);
 
-    SCR_WIDTH = mode->width;
-    SCR_HEIGHT = mode->height;
+    window = glfwCreateWindow(mode->width, mode->height, title, monitor, NULL);
 
-    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, title, monitor, NULL);
+    SCR_WIDTH = static_cast<unsigned int>(mode->width);
+    SCR_HEIGHT = static_cast<unsigned int>(mode->height);
+
+    (void)width;
+    (void)height;
 #else
     SCR_WIDTH = width;
     SCR_HEIGHT = height;
