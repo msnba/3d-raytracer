@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <stdexcept>
 #include <stdint.h>
@@ -12,9 +13,10 @@
 
 #include "viewport.h"
 #include "bvh.h"
+#include "gui.h"
 #include "shader_sources.h"
 
-Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), scene_(scene)
+Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene)
 {
     if (!window_)
     {
@@ -74,11 +76,9 @@ void Viewport::update()
     lastFrame_ = currentFrame;
 
     processKeyInput();
-
     processGui();
 
     raytrace_.use();
-
     raytrace_.set("frameIndex", accumFrameIndex_);
     raytrace_.set("cameraPos", camera_->cameraPos_);
     raytrace_.set("cameraFront", camera_->cameraFront_);
@@ -91,10 +91,8 @@ void Viewport::update()
         1);
 
     glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
-
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, static_cast<GLsizei>(window_->SCR_WIDTH), static_cast<GLsizei>(window_->SCR_HEIGHT));
-    glClear(GL_COLOR_BUFFER_BIT);
 
     passthrough_.use();
     glActiveTexture(GL_TEXTURE0);
@@ -116,16 +114,8 @@ void Viewport::processGui()
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(static_cast<float>(window_->SCR_WIDTH), static_cast<float>(window_->SCR_HEIGHT) / 30.0f), ImGuiCond_Always);
-    ImGui::Begin("Stats Panel", nullptr,
-                 ImGuiWindowFlags_NoResize |
-                     ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoDecoration |
-                     ImGuiWindowFlags_AlwaysAutoResize);
 
-    ImGui::Text("FPS: %.0f", 1.0f / deltaTime_);
-    ImGui::End();
+    gui_->render(getFPS());
 }
 
 void Viewport::processKeyInput()
@@ -209,7 +199,7 @@ void Viewport::rebuildScene()
     {
         uint32_t maxBounce;
         uint32_t numRaysPerPixel;
-    } sceneData{5, 1}; // maxBounce, numRaysPerPixel
+    } sceneData{5, 1};
 
     if (dataSSBO_)
         glDeleteBuffers(1, &dataSSBO_);
@@ -252,6 +242,22 @@ void Viewport::rebuildScene()
 bool Viewport::shouldClose() const
 {
     return glfwWindowShouldClose(rawWindow_);
+}
+
+std::string Viewport::getFPS()
+{
+    fpsTimer_ += deltaTime_;
+    fpsFrameCount_++;
+
+    if (fpsTimer_ >= fpsInterval_)
+    {
+        fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
+
+        fpsTimer_ = 0.0f;
+        fpsFrameCount_ = 0;
+    }
+
+    return fpsString_;
 }
 
 void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)

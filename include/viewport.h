@@ -6,11 +6,14 @@
 #include "camera.h"
 #include "object.h"
 #include "shader.h"
+#include "gui.h"
 
 class Viewport
 {
+    friend class GUI;
+
 public:
-    Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene_);
+    Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene);
     ~Viewport();
 
     Viewport(const Viewport &) = delete;
@@ -22,6 +25,7 @@ public:
     void rebuildScene();
 
     bool shouldClose() const;
+    std::string getFPS();
 
 private:
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
@@ -29,6 +33,7 @@ private:
 
     std::unique_ptr<Window> window_;
     std::unique_ptr<Camera> camera_;
+    std::unique_ptr<GUI> gui_;
     std::weak_ptr<Scene> scene_;
     GLFWwindow *rawWindow_ = nullptr;
 
@@ -47,6 +52,11 @@ private:
     uint32_t accumFrameIndex_ = 0;
     float deltaTime_ = 0.0f;
     float lastFrame_ = 0.0f;
+    int fpsFrameCount_ = 0;
+    float lastFPS_ = 0.0f;
+    float fpsTimer_ = 0.0f;
+    const float fpsInterval_ = 0.5f;
+    std::string fpsString_;
 
     float mouseLastX_ = 0.0f;
     float mouseLastY_ = 0.0f;

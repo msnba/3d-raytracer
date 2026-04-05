@@ -21,8 +21,8 @@ public:
 
     void use() const;
 
-    template <typename T>
-    void set(const std::string &name, T value) const;
+    template <typename T_>
+    void set(const std::string &name, T_ value) const;
 
 private:
     mutable std::unordered_map<std::string, int> uniformCache_;
