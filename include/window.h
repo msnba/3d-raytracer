@@ -1,5 +1,4 @@
-#ifndef WINDOW_H
-#define WINDOW_H
+#pragma once
 
 #include <GLFW/glfw3.h>
 class Window
@@ -10,4 +9,3 @@ public:
     Window(unsigned int width, unsigned int height, const char *title);
     ~Window();
 };
-#endif

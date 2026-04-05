@@ -1,0 +1,13 @@
+#pragma once
+
+inline const char *RAYTRACER_COMP = R"GLSL(
+@RAYTRACER_COMP@
+)GLSL";
+
+inline const char *PASS_VERT = R"GLSL(
+@PASS_VERT@
+)GLSL";
+
+inline const char *PASS_FRAG = R"GLSL(
+@PASS_FRAG@
+)GLSL";

@@ -58,6 +58,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = nullptr; // Disables ini saving beside the executable
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();

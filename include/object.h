@@ -1,5 +1,4 @@
-#ifndef OBJECT_H
-#define OBJECT_H
+#pragma once
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -118,5 +117,3 @@ Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &
 void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes);
 
 Mesh loadRect(Rectangle rect, Scene &scene);
-
-#endif

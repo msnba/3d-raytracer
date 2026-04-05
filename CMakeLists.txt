@@ -10,6 +10,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>") # Static linking for MSVC
+
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
@@ -36,6 +38,7 @@ endif()
 
 target_include_directories(engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_BINARY_DIR}/include"
 )
 
 target_link_libraries(engine PRIVATE
@@ -44,6 +47,11 @@ target_link_libraries(engine PRIVATE
     glad::glad
     imgui::imgui
 )
+
+file(READ "assets/raytracer.comp" RAYTRACER_COMP)
+file(READ "assets/pass.vert" PASS_VERT)
+file(READ "assets/pass.frag" PASS_FRAG)
+configure_file(assets/shader_sources.h.in include/shader_sources.h)
 
 add_custom_command(
     TARGET engine POST_BUILD

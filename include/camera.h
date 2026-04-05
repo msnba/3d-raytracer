@@ -1,5 +1,4 @@
-#ifndef CAMERA_H
-#define CAMERA_H
+#pragma once
 
 #include <glm/glm.hpp>
 #include <stdint.h>
@@ -23,5 +22,3 @@ private:
     glm::vec3 cameraPos_, cameraFront_, cameraUp_;
     void normalize();
 };
-
-#endif

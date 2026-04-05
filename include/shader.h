@@ -1,35 +1,33 @@
-#ifndef SHADER_H
-#define SHADER_H
+#pragma once
 
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
 #include <string>
-#include <fstream>
-#include <sstream>
-#include <iostream>
-
-enum ShaderType
-{
-    PATH,
-    SOURCE
-};
+#include <unordered_map>
 
 class Shader
 {
 public:
-    unsigned int ID;
+    unsigned int ID_ = 0;
 
     Shader() = default;
-    Shader(const char *vertexPath, const char *fragmentPath, ShaderType type);
-    Shader(const char *computePath);
+    Shader(const char *vertexCode, const char *fragmentCode);
+    Shader(const char *computeCode);
 
-    void setBool(const std::string &name, bool value) const;
-    void setInt(const std::string &name, int value) const;
-    void setFloat(const std::string &name, float value) const;
-    void setMat4(const std::string &name, glm::mat4 value) const;
-    void setVec3(const std::string &name, glm::vec3 value) const;
-    void setVec2(const std::string &name, glm::vec2 value) const;
+    ~Shader();
+    Shader(const Shader &other);
+    Shader &operator=(const Shader &other);
+    Shader(Shader &&other) noexcept;
+    Shader &operator=(Shader &&other) noexcept;
+
+    void use() const;
+
+    template <typename T>
+    void set(const std::string &name, T value) const;
+
+private:
+    mutable std::unordered_map<std::string, int> uniformCache_;
+
+    int getLocation(const std::string &name) const;
+    static unsigned int compileShader(unsigned int type, const char *source);
+    static void linkShader(unsigned int program);
 };
-
-#endif

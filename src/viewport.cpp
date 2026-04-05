@@ -12,6 +12,7 @@
 
 #include "viewport.h"
 #include "bvh.h"
+#include "shader_sources.h"
 
 Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), scene_(scene)
 {
@@ -30,8 +31,8 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     glfwSetScrollCallback(rawWindow_, Viewport::scrollCallback);
     glDisable(GL_BLEND);
 
-    passthrough_ = Shader("assets/pass.vert", "assets/pass.frag", ShaderType::PATH);
-    raytrace_ = Shader("assets/raytracer.comp");
+    passthrough_ = Shader(PASS_VERT, PASS_FRAG);
+    raytrace_ = Shader(RAYTRACER_COMP);
 
     mouseLastX_ = static_cast<float>(window_->SCR_WIDTH) / 2.0f;
     mouseLastY_ = static_cast<float>(window_->SCR_HEIGHT) / 2.0f;
@@ -61,10 +62,9 @@ Viewport::~Viewport()
 {
     glDeleteVertexArrays(1, &quadVAO_);
     glDeleteBuffers(1, &quadVBO_);
-    glDeleteBuffers(1, &sphereSSBO_); // Don't forget these!
+    glDeleteBuffers(1, &sphereSSBO_);
     glDeleteBuffers(1, &matSSBO_);
     glDeleteTextures(1, &accumTexture_);
-    glDeleteProgram(raytrace_.ID);
 }
 
 void Viewport::update()
@@ -77,43 +77,37 @@ void Viewport::update()
 
     processGui();
 
-    glUseProgram(raytrace_.ID);
+    raytrace_.use();
 
-    glUniform1ui(
-        glGetUniformLocation(raytrace_.ID, "frameIndex"),
-        accumFrameIndex_);
-
-    raytrace_.setVec3("cameraPos", camera_->cameraPos_);
-    raytrace_.setVec3("cameraFront", camera_->cameraFront_);
-    raytrace_.setVec3("cameraUp", camera_->cameraUp_);
-    raytrace_.setFloat("fov", camera_->fov_);
+    raytrace_.set("frameIndex", accumFrameIndex_);
+    raytrace_.set("cameraPos", camera_->cameraPos_);
+    raytrace_.set("cameraFront", camera_->cameraFront_);
+    raytrace_.set("cameraUp", camera_->cameraUp_);
+    raytrace_.set("fov", camera_->fov_);
 
     glDispatchCompute(
         (window_->SCR_WIDTH + 15) / 16,
         (window_->SCR_HEIGHT + 15) / 16,
         1);
 
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT); // needed for shared frames
-
-    ImGui::Render();
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, static_cast<GLsizei>(window_->SCR_WIDTH), static_cast<GLsizei>(window_->SCR_HEIGHT));
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glUseProgram(passthrough_.ID);
+    passthrough_.use();
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, accumTexture_);
-    glUniform1i(glGetUniformLocation(passthrough_.ID, "accumTex"), 0);
-
+    passthrough_.set("accumTex", 0);
     glBindVertexArray(quadVAO_);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    accumFrameIndex_++; // * Comment out to disable accumulation
-
+    ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    glfwSwapBuffers(rawWindow_);
 
+    accumFrameIndex_++; // * Comment out to disable accumulation
+    glfwSwapBuffers(rawWindow_);
     glfwPollEvents();
 }
 

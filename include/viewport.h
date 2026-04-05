@@ -1,5 +1,4 @@
-#ifndef VIEWPORT_H
-#define VIEWPORT_H
+#pragma once
 
 #include <memory>
 
@@ -13,6 +12,8 @@ class Viewport
 public:
     Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::weak_ptr<Scene> scene_);
     ~Viewport();
+
+    Viewport(const Viewport &) = delete;
 
     void update();
     void processGui();
@@ -50,5 +51,3 @@ private:
     float mouseLastX_ = 0.0f;
     float mouseLastY_ = 0.0f;
 };
-
-#endif
