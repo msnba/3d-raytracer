@@ -32,7 +32,8 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 ```bash
 sudo dnf install cmake ninja-build gcc gcc-c++ pkgconf-pkg-config \
                  libX11-devel libXrandr-devel libXinerama-devel \
-                 libXcursor-devel libXi-devel mesa-libGLU-devel
+                 libXcursor-devel libXi-devel mesa-libGLU-devel \
+                 autoconf automake autoconf-archive
 ```
 
 #### Linux (Ubuntu / Debian)
@@ -40,7 +41,8 @@ sudo dnf install cmake ninja-build gcc gcc-c++ pkgconf-pkg-config \
 sudo apt update
 sudo apt install cmake ninja-build build-essential pkg-config \
                  libx11-dev libxrandr-dev libxinerama-dev \
-                 libxcursor-dev libxi-dev libglu1-mesa-dev
+                 libxcursor-dev libxi-dev libglu1-mesa-dev \
+                 autoconf automake autoconf-archive
 ```
 
 #### Windows (Visual Studio)

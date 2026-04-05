@@ -1,15 +1,20 @@
 #include <glad/glad.h>
-#include <GLFW/glfw3.h> // ! Must be included after GLAD (due to method overriding).
+#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <future>
 #include <stdexcept>
 #include <stdint.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <portable-file-dialogs.h>
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 
 #include "viewport.h"
 #include "bvh.h"
@@ -28,8 +33,6 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
     glfwSetWindowUserPointer(rawWindow_, this);
 
-    glfwSetCursorPosCallback(rawWindow_, Viewport::cursorPosCallback);
-    glfwSetInputMode(rawWindow_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetScrollCallback(rawWindow_, Viewport::scrollCallback);
     glDisable(GL_BLEND);
 
@@ -101,10 +104,15 @@ void Viewport::update()
     glBindVertexArray(quadVAO_);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
+    if (isScreenshot_)
+        saveScreenshot();
+
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-    accumFrameIndex_++; // * Comment out to disable accumulation
+    if (!isPanning_ && !isMoving_)
+        accumFrameIndex_++; // * Comment out to disable accumulation
+    else if (accumFrameIndex_ != 0)
+        accumFrameIndex_ = 0;
     glfwSwapBuffers(rawWindow_);
     glfwPollEvents();
 }
@@ -116,23 +124,6 @@ void Viewport::processGui()
     ImGui::NewFrame();
 
     gui_->render(getFPS());
-}
-
-void Viewport::processKeyInput()
-{
-    if (glfwGetKey(rawWindow_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(rawWindow_, true);
-
-    glm::vec3 oldPos = camera_->cameraPos_;
-    float oldYaw = camera_->yaw_;
-    float oldPitch = camera_->pitch_;
-
-    camera_->handleKeyInput(rawWindow_, deltaTime_);
-
-    if (camera_->cameraPos_ != oldPos ||
-        camera_->yaw_ != oldYaw ||
-        camera_->pitch_ != oldPitch)
-        accumFrameIndex_ = 0;
 }
 
 void Viewport::rebuildScene()
@@ -258,6 +249,76 @@ std::string Viewport::getFPS()
     }
 
     return fpsString_;
+}
+
+void Viewport::saveScreenshot()
+{
+    if (screenshotInProgress_)
+        return;
+
+    isScreenshot_ = false;
+    screenshotInProgress_ = true;
+
+    int w = static_cast<int>(window_->SCR_WIDTH);
+    int h = static_cast<int>(window_->SCR_HEIGHT);
+
+    auto pixels = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(w * h * 3));
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels->data());
+
+    std::thread([this, pixels, w, h]()
+                {
+                    std::string destination = pfd::save_file("Save Screenshot", "screenshot.png",
+                                                             {"PNG Files", "*.png"})
+                                                  .result();
+                    if (!destination.empty())
+                    {
+                        if (destination.size() < 4 || destination.substr(destination.size() - 4) != ".png")
+                            destination += ".png";
+
+                        stbi_flip_vertically_on_write(1);
+                        stbi_write_png(destination.c_str(), w, h, 3, pixels->data(), w * 3);
+                        std::cout << "Screenshot saved in " << destination << "\n";
+                    }
+
+                    screenshotInProgress_ = false; })
+        .detach();
+}
+
+void Viewport::processKeyInput()
+{
+    // Keybinds
+    if (glfwGetKey(rawWindow_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(rawWindow_, true);
+
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F12) == GLFW_PRESS && !isScreenshot_ && !screenshotInProgress_)
+        isScreenshot_ = true;
+
+    // Panning & Moving Logic
+    if (glfwGetMouseButton(rawWindow_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && !isPanning_)
+    {
+        // prevents camera snapping to cursor
+        double cursorX, cursorY;
+        glfwGetCursorPos(rawWindow_, &cursorX, &cursorY);
+        mouseLastX_ = static_cast<float>(cursorX);
+        mouseLastY_ = static_cast<float>(cursorY);
+
+        glfwSetCursorPosCallback(rawWindow_, Viewport::cursorPosCallback);
+        glfwSetInputMode(rawWindow_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        isPanning_ = true;
+    }
+
+    if (glfwGetMouseButton(rawWindow_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE && isPanning_)
+    {
+        glfwSetCursorPosCallback(rawWindow_, nullptr);
+        glfwSetInputMode(rawWindow_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        isPanning_ = false;
+    }
+
+    glm::vec3 oldPos = camera_->cameraPos_;
+
+    camera_->handleKeyInput(rawWindow_, deltaTime_);
+
+    isMoving_ = camera_->cameraPos_ != oldPos && !isMoving_;
 }
 
 void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)

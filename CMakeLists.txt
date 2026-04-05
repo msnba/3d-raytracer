@@ -16,6 +16,8 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(Stb REQUIRED)
+find_package(tinyobjloader CONFIG REQUIRED)
 
 file(GLOB_RECURSE SRC_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -35,10 +37,12 @@ else()
         -Wsign-conversion) 
 endif()
 
-
+find_path(PORTABLE_FILE_DIALOGS_INCLUDE_DIRS "portable-file-dialogs.h")
 target_include_directories(engine PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_BINARY_DIR}/include"
+    "${Stb_INCLUDE_DIR}"
+    ${PORTABLE_FILE_DIALOGS_INCLUDE_DIRS}
 )
 
 target_link_libraries(engine PRIVATE
@@ -46,6 +50,8 @@ target_link_libraries(engine PRIVATE
     glm::glm
     glad::glad
     imgui::imgui
+    tinyobjloader::tinyobjloader
+
 )
 
 file(READ "assets/raytracer.comp" RAYTRACER_COMP)

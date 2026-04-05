@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <atomic>
 
 #include "window.h"
 #include "camera.h"
@@ -10,8 +11,6 @@
 
 class Viewport
 {
-    friend class GUI;
-
 public:
     Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene);
     ~Viewport();
@@ -28,6 +27,7 @@ public:
     std::string getFPS();
 
 private:
+    void saveScreenshot();
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
     static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 
@@ -60,4 +60,10 @@ private:
 
     float mouseLastX_ = 0.0f;
     float mouseLastY_ = 0.0f;
+
+    bool isScreenshot_ = false;
+    bool isPanning_ = false;
+    bool isMoving_ = false;
+
+    std::atomic<bool> screenshotInProgress_ = false;
 };

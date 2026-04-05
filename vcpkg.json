@@ -5,7 +5,13 @@
     "glm",
     {
       "name": "imgui",
-      "features": ["glfw-binding", "opengl3-binding"]
-    }
+      "features": [
+        "glfw-binding",
+        "opengl3-binding"
+      ]
+    },
+    "tinyobjloader",
+    "stb",
+    "portable-file-dialogs"
   ]
 }
