@@ -19,6 +19,6 @@ public:
 
 private:
     float fov_, speed_, yaw_, pitch_;
-    glm::vec3 cameraPos_, cameraFront_, cameraUp_;
+    glm::vec3 cameraPos_, cameraFront_;
     void normalize();
 };

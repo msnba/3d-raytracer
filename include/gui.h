@@ -15,7 +15,7 @@ class GUI
 {
 public:
     GUI() = default;
-    GUI(GLFWwindow *rawWindow, const std::string &file);
+    GUI(GLFWwindow *rawWindow, const std::string &filepath);
 
     void render(const std::string &fpsString);
     bool loadSettings(const std::string &filepath);

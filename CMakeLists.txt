@@ -54,6 +54,12 @@ target_link_libraries(engine PRIVATE
 
 )
 
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    assets/raytracer.comp
+    assets/pass.vert
+    assets/pass.frag
+)
+
 file(READ "assets/raytracer.comp" RAYTRACER_COMP)
 file(READ "assets/pass.vert" PASS_VERT)
 file(READ "assets/pass.frag" PASS_FRAG)

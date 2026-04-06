@@ -2,15 +2,15 @@
 #include <imgui.h>
 #include <fstream>
 #include <sstream>
+#include <charconv>
 
 #include "window.h"
 #include "gui.h"
 
-GUI::GUI(GLFWwindow *rawWindow, const std::string &file) : rawWindow_(rawWindow)
+GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWindow)
 {
-    // not loading from a settings file yet
-    // loadSettings(file);
-    (void)file;
+    if (!loadSettings(filepath))
+        throw std::runtime_error("Settings at file \"" + filepath + "\" cannot be loaded.");
 }
 
 void GUI::render(const std::string &fpsString)
@@ -32,8 +32,25 @@ void GUI::render(const std::string &fpsString)
 
 bool GUI::loadSettings(const std::string &filepath)
 {
-    (void)filepath;
-    return false;
+    std::ifstream file(filepath);
+    if (!file.is_open())
+        return false;
+
+    std::string line;
+    while (getline(file, line))
+    {
+        if (line.empty() || line[0] == '#')
+            continue;
+
+        std::istringstream ss(line);
+        std::string key, value;
+        if (!std::getline(ss, key, '=') || !std::getline(ss, value))
+            continue;
+
+        settingsMap[key] = parseValue(value);
+    }
+
+    return true;
 }
 
 bool GUI::saveSettings(const std::string &filepath)
@@ -44,6 +61,19 @@ bool GUI::saveSettings(const std::string &filepath)
 
 SettingValue GUI::parseValue(const std::string &value)
 {
-    (void)value;
-    return nullptr;
+    if (value == "true" || value == "false")
+        return value == "true";
+
+    // type checking without having to use try/catch
+    int i;
+    auto [ptr_i, ec_i] = std::from_chars(value.data(), value.data() + value.size(), i);
+    if (ec_i == std::errc{} && ptr_i == value.data() + value.size())
+        return i;
+
+    float f;
+    auto [ptr_f, ec_f] = std::from_chars(value.data(), value.data() + value.size(), f);
+    if (ec_i == std::errc{} && ptr_f == value.data() + value.size())
+        return f;
+
+    return value;
 }

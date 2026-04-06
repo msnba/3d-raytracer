@@ -5,11 +5,8 @@
 
 #include "camera.h"
 
-Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos) : fov_(fov), speed_(speed), yaw_(yaw), pitch_(pitch), cameraPos_(cameraPos)
+Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraPos) : fov_(fov), speed_(speed), yaw_(yaw), pitch_(pitch), cameraPos_(cameraPos), cameraFront_(glm::vec3(0.0f, 0.0f, 1.0f))
 {
-    cameraFront_ = glm::vec3(0.0f, 0.0f, 1.0f);
-    cameraUp_ = glm::vec3(0.0f, 1.0f, 0.0f);
-
     normalize();
 }
 
@@ -19,13 +16,17 @@ void Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
 
     // movement
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos_ += velocity * cameraFront_;
+        cameraPos_ += velocity * glm::normalize(cameraFront_ * glm::vec3(1, 0, 1));
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos_ -= velocity * cameraFront_;
+        cameraPos_ -= velocity * glm::normalize(cameraFront_ * glm::vec3(1, 0, 1));
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos_ -= glm::normalize(glm::cross(cameraFront_, cameraUp_)) * velocity;
+        cameraPos_ -= velocity * glm::normalize(glm::cross(cameraFront_, glm::vec3(0, 1, 0)));
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos_ += glm::normalize(glm::cross(cameraFront_, cameraUp_)) * velocity;
+        cameraPos_ += velocity * glm::normalize(glm::cross(cameraFront_, glm::vec3(0, 1, 0)));
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+        cameraPos_ += velocity * glm::vec3(0, 1, 0);
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+        cameraPos_ -= velocity * glm::vec3(0, 1, 0);
 }
 
 void Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)

@@ -21,7 +21,7 @@
 #include "gui.h"
 #include "shader_sources.h"
 
-Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene)
+Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene), rawWindow_(window_->window), passthrough_(PASS_VERT, PASS_FRAG), raytrace_(RAYTRACER_COMP)
 {
     if (!window_)
     {
@@ -29,15 +29,10 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
         throw std::runtime_error("Viewport created without a valid window.");
     }
 
-    rawWindow_ = window_->window;
-
     glfwSetWindowUserPointer(rawWindow_, this);
 
     glfwSetScrollCallback(rawWindow_, Viewport::scrollCallback);
     glDisable(GL_BLEND);
-
-    passthrough_ = Shader(PASS_VERT, PASS_FRAG);
-    raytrace_ = Shader(RAYTRACER_COMP);
 
     mouseLastX_ = static_cast<float>(window_->SCR_WIDTH) / 2.0f;
     mouseLastY_ = static_cast<float>(window_->SCR_HEIGHT) / 2.0f;
@@ -85,7 +80,6 @@ void Viewport::update()
     raytrace_.set("frameIndex", accumFrameIndex_);
     raytrace_.set("cameraPos", camera_->cameraPos_);
     raytrace_.set("cameraFront", camera_->cameraFront_);
-    raytrace_.set("cameraUp", camera_->cameraUp_);
     raytrace_.set("fov", camera_->fov_);
 
     glDispatchCompute(
@@ -242,7 +236,8 @@ std::string Viewport::getFPS()
 
     if (fpsTimer_ >= fpsInterval_)
     {
-        fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
+        // fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
+        fpsString_ = std::to_string(gui_->get("test", 3.0f));
 
         fpsTimer_ = 0.0f;
         fpsFrameCount_ = 0;
@@ -287,7 +282,7 @@ void Viewport::saveScreenshot()
 void Viewport::processKeyInput()
 {
     // Keybinds
-    if (glfwGetKey(rawWindow_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    if (glfwGetKey(rawWindow_, GLFW_KEY_Q) == GLFW_PRESS && (glfwGetKey(rawWindow_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(rawWindow_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)) // Ctrl + Q
         glfwSetWindowShouldClose(rawWindow_, true);
 
     if (glfwGetKey(rawWindow_, GLFW_KEY_F12) == GLFW_PRESS && !isScreenshot_ && !screenshotInProgress_)
