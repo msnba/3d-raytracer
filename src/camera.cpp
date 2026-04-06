@@ -58,7 +58,7 @@ void Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mou
 void Camera::handleScrollInput(double xoffset, double yoffset)
 {
     float sensitivity = 2.5f;
-    fov_ = std::min(std::max(fov_ - sensitivity * static_cast<float>(yoffset), 0.1f), 150.0f);
+    fov_ = std::min(std::max(fov_ - sensitivity * static_cast<float>(yoffset), 10.f), 150.f);
 
     (void)xoffset;
 }

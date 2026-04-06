@@ -11,27 +11,51 @@
 
 using SettingValue = std::variant<int, float, bool, std::string>;
 
+// i know this isn't the best way to pass data
+//  TODO: refactor vieport data
+struct ViewportData
+{
+    uint32_t accumFrameIndex_ = 0;
+    float deltaTime_ = 0.0f;
+    float lastFrame_ = 0.0f;
+    int fpsFrameCount_ = 0;
+    float lastFPS_ = 0.0f;
+    float fpsTimer_ = 0.0f;
+    const float fpsInterval_ = 0.5f;
+    std::string fpsString_;
+    bool isScreenshot_ = false;
+    bool isPanning_ = false;
+    bool isMoving_ = false;
+    float fov_ = 90.0f;
+};
+
 class GUI
 {
 public:
     GUI() = default;
     GUI(GLFWwindow *rawWindow, const std::string &filepath);
 
-    void render(const std::string &fpsString);
+    ~GUI();
+    GUI(const GUI &) = delete;
+    GUI &operator=(const GUI &) = delete;
+    GUI(GUI &&other) noexcept;
+    GUI &operator=(GUI &&other) noexcept;
+
+    void render(const ViewportData &data);
     bool loadSettings(const std::string &filepath);
     bool saveSettings(const std::string &filepath);
 
     template <typename T_>
-    void setSetting(const std::string &key, T_ value)
+    void set(const std::string &key, T_ value)
     {
-        settingsMap[key] = SettingValue(value);
+        settingsMap_[key] = SettingValue(value);
     }
 
     template <typename T_>
     T_ get(const std::string &key, T_ fallback) const
     {
-        auto it = settingsMap.find(key);
-        if (it == settingsMap.end())
+        auto it = settingsMap_.find(key);
+        if (it == settingsMap_.end())
             return fallback;
 
         if (auto *val = std::get_if<T_>(&it->second))
@@ -41,8 +65,13 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, SettingValue> settingsMap;
+    static SettingValue parseValue(const std::string &value);
+    void destroySelf();
+
+    std::unordered_map<std::string, SettingValue> settingsMap_;
     GLFWwindow *rawWindow_ = nullptr;
 
-    static SettingValue parseValue(const std::string &value);
+    float guiScale_ = 1.0f;
+    bool showTopBar_ = true;
+    bool showStats_ = true;
 };

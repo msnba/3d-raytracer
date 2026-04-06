@@ -117,7 +117,7 @@ void Viewport::processGui()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    gui_->render(getFPS());
+    gui_->render({.accumFrameIndex_ = accumFrameIndex_, .deltaTime_ = deltaTime_, .fpsString_ = getFPS(), .fov_ = camera_->fov_});
 }
 
 void Viewport::rebuildScene()
@@ -236,8 +236,8 @@ std::string Viewport::getFPS()
 
     if (fpsTimer_ >= fpsInterval_)
     {
-        // fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
-        fpsString_ = std::to_string(gui_->get("test", 3.0f));
+        fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
+        // fpsString_ = std::to_string(gui_->get("test", 3.0f));
 
         fpsTimer_ = 0.0f;
         fpsFrameCount_ = 0;
@@ -304,7 +304,7 @@ void Viewport::processKeyInput()
 
     if (glfwGetMouseButton(rawWindow_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE && isPanning_)
     {
-        glfwSetCursorPosCallback(rawWindow_, nullptr);
+        glfwSetCursorPosCallback(rawWindow_, ImGui_ImplGlfw_CursorPosCallback);
         glfwSetInputMode(rawWindow_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         isPanning_ = false;
     }
