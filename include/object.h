@@ -110,10 +110,10 @@ inline glm::mat4 getMatrix(const Transform &t)
     glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
 
     return T * R * S;
-};
+}
 
 Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &transform, std::vector<GPUMaterial> &materialPool);
 
 void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes);
 
-Mesh loadRect(Rectangle rect, Scene &scene);
+Mesh loadRect(struct Rectangle rect, Scene &scene);

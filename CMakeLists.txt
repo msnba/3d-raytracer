@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
+
+if(WIN32)
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "" FORCE)
+endif()
+
 project(engine CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -10,8 +16,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>") # Static linking for MSVC
-
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
@@ -22,19 +26,23 @@ find_package(tinyobjloader CONFIG REQUIRED)
 file(GLOB_RECURSE SRC_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
+list(FILTER SRC_SOURCES EXCLUDE REGEX "tiny_obj_impl\\.cpp")
 
 add_executable(engine ${SRC_SOURCES})
 
 # Strict error checking for both platforms, warnings are treated as errors.
 if(MSVC)
-    target_compile_options(engine PRIVATE /W4 /permissive- /WX)
+    target_compile_options(engine PRIVATE /W4 /permissive- /WX
+        $<$<CONFIG:Debug>:/MTd>
+        $<$<NOT:$<CONFIG:Debug>>:/MT>
+    )
 else()
-    target_compile_options(engine PRIVATE 
-        -Wall -Wextra -Wpedantic -pedantic-errors -Werror
-        -Wvla 
+    target_compile_options(engine PRIVATE
+        -Wall -Wextra -pedantic-errors -Werror
+        -Wvla
         -Wconversion
         -Wfloat-conversion
-        -Wsign-conversion) 
+        -Wsign-conversion)
 endif()
 
 find_path(PORTABLE_FILE_DIALOGS_INCLUDE_DIRS "portable-file-dialogs.h")
