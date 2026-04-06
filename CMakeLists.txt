@@ -7,6 +7,15 @@ endif()
 
 project(engine CXX C)
 
+# Compiler guard
+if(MSVC)
+    message(STATUS "Compiler recognized as MSVC")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(STATUS "Compiler recognized as GCC")
+else()
+    message(FATAL_ERROR "Unsupported compiler: ${CMAKE_CXX_COMPILER_ID}. Please use MSVC or GCC.")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -28,15 +37,16 @@ file(GLOB_RECURSE SRC_SOURCES
 )
 list(FILTER SRC_SOURCES EXCLUDE REGEX "tiny_obj_impl\\.cpp")
 
-add_executable(engine ${SRC_SOURCES})
-
 # Strict error checking for both platforms, warnings are treated as errors.
 if(MSVC)
+    add_executable(engine WIN32 ${SRC_SOURCES})
     target_compile_options(engine PRIVATE /W4 /permissive- /WX
         $<$<CONFIG:Debug>:/MTd>
         $<$<NOT:$<CONFIG:Debug>>:/MT>
     )
+    target_link_options(engine PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
 else()
+    add_executable(engine ${SRC_SOURCES})
     target_compile_options(engine PRIVATE
         -Wall -Wextra -pedantic-errors -Werror
         -Wvla

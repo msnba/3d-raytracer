@@ -91,7 +91,7 @@ void GUI::render(const ViewportData &data)
     if (showStats_)
     {
         float menuBarHeight = ImGui::GetFrameHeight(); // avoids overlapping top bar
-        ImGui::SetNextWindowPos({0, menuBarHeight}, ImGuiCond_Once);
+        ImGui::SetNextWindowPos({0, menuBarHeight}, ImGuiCond_Appearing);
         ImGui::SetNextWindowSize({180.0f * guiScale_, 100.0f * guiScale_}, ImGuiCond_Appearing);
 
         ImGui::Begin("Stats Panel", nullptr);
