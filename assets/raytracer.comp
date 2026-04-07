@@ -22,7 +22,6 @@ struct Material {
 struct Ray {
     vec3 origin;
     vec3 direction;
-    vec3 invDir;
 };
 
 struct Collision {
@@ -111,8 +110,9 @@ Collision raySphere(Ray ray, Sphere s){
 }
 
 bool rayAABB(Ray ray, vec3 minB, vec3 maxB, float maxDist){
-    vec3 t0 = (minB - ray.origin) * ray.invDir;
-    vec3 t1 = (maxB - ray.origin) * ray.invDir;
+    vec3 invDir = 1.0f / ray.direction;
+    vec3 t0 = (minB - ray.origin) * invDir;
+    vec3 t1 = (maxB - ray.origin) * invDir;
 
     vec3 tmin = min(t0, t1);
     vec3 tmax = max(t0, t1);
@@ -327,7 +327,6 @@ void main()
     Ray ray;
     ray.origin = cameraPos;
     ray.direction = normalize(1.0/tan(radians(fov) * .5) * forward + screen.x * right + screen.y * up); //fov correction
-    ray.invDir = 1.0 / ray.direction;
 
     vec3 totalLight = vec3(0);
     for (int i = 0; i < int(sceneData.numRaysPerPixel); i++) {

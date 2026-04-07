@@ -70,10 +70,10 @@ On Windows, use the Developer Command Prompt.
 ```bash
 git clone https://github.com/msnba/3d-raytracer.git
 cd 3d-raytracer
-vcpkg integrate install
 
 # Windows (Developer Command Prompt)
-cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Release
+vcpkg integrate install
+cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE="/path/to/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Release
 
 # Linux
 cmake -Bbuild -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-linux -DCMAKE_BUILD_TYPE=Release
