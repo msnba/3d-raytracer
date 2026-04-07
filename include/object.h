@@ -62,7 +62,7 @@ struct Rectangle
 struct Mesh
 {
     std::vector<tinyobj::index_t> indices;
-    const tinyobj::attrib_t *attrib;
+    std::vector<glm::vec3> vertices;
     Transform transform;
     uint32_t materialIdx;
     glm::vec3 minBounds;

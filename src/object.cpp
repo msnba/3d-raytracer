@@ -2,15 +2,15 @@
 
 Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &transform, std::vector<GPUMaterial> &materialPool)
 {
-    uint32_t materialIndex = static_cast<uint32_t>(materialPool.size());
+    const uint32_t materialIndex = static_cast<uint32_t>(materialPool.size());
     materialPool.push_back(mat);
 
-    tinyobj::attrib_t *attrib = new tinyobj::attrib_t(); // mem leak, fix later
+    tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::string warn, err;
 
     bool ok = tinyobj::LoadObj(
-        attrib,
+        &attrib,
         &shapes,
         nullptr,
         &warn,
@@ -29,27 +29,31 @@ Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &
         return Mesh();
     }
 
+    std::vector<glm::vec3> vertices;
     glm::vec3 minB(std::numeric_limits<float>::max());
     glm::vec3 maxB(std::numeric_limits<float>::lowest());
     std::vector<tinyobj::index_t> indices;
 
     for (const tinyobj::shape_t &shape : shapes)
     {
-        for (const tinyobj::index_t &idx : shape.mesh.indices)
+        for (size_t i = 0; i + 2 < shape.mesh.indices.size(); i += 3)
         {
-            indices.push_back(idx);
-
-            unsigned int vertex_index = 3u * static_cast<unsigned int>(idx.vertex_index);
-            float vx = attrib->vertices[vertex_index + 0];
-            float vy = attrib->vertices[vertex_index + 1];
-            float vz = attrib->vertices[vertex_index + 2];
-
-            minB = glm::min(minB, glm::vec3(vx, vy, vz));
-            maxB = glm::max(maxB, glm::vec3(vx, vy, vz));
+            for (size_t j = 0; j < 3; j++)
+            {
+                unsigned int vi = static_cast<unsigned int>(shape.mesh.indices[i + j].vertex_index);
+                glm::vec3 v = {
+                    attrib.vertices[vi * 3u],
+                    attrib.vertices[vi * 3u + 1u],
+                    attrib.vertices[vi * 3u + 2u]};
+                vertices.push_back(v);
+                minB = glm::min(minB, v);
+                maxB = glm::max(maxB, v);
+                indices.push_back(shape.mesh.indices[i + j]);
+            }
         }
     }
 
-    return Mesh{std::move(indices), attrib, transform, materialIndex, minB, maxB};
+    return Mesh{std::move(indices), std::move(vertices), transform, materialIndex, minB, maxB};
 }
 
 void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes)
@@ -61,8 +65,7 @@ void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangl
 
     for (const Mesh &mesh : scene.meshes)
     {
-        const tinyobj::attrib_t &attrib = *mesh.attrib;
-        glm::mat4 model = getMatrix(mesh.transform); // Compute once here
+        glm::mat4 model = getMatrix(mesh.transform);
 
         for (size_t i = 0; i < mesh.indices.size(); i += 3)
         {
@@ -74,9 +77,9 @@ void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangl
 
             GPUTriangle tri;
 
-            tri.a = model * glm::vec4(pos(ind[0], attrib), 1.0f);
-            tri.b = model * glm::vec4(pos(ind[1], attrib), 1.0f);
-            tri.c = model * glm::vec4(pos(ind[2], attrib), 1.0f);
+            tri.a = model * glm::vec4(mesh.vertices[i], 1.0f);
+            tri.b = model * glm::vec4(mesh.vertices[i + 1], 1.0f);
+            tri.c = model * glm::vec4(mesh.vertices[i + 2], 1.0f);
 
             tri.materialIdx = mesh.materialIdx;
             tri.pad0 = 0;

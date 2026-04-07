@@ -164,8 +164,8 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(bvh.triangles.size() * sizeof(GPUTriangle)),
-        bvh.triangles.data(),
+        static_cast<long int>(bvh.triangles_.size() * sizeof(GPUTriangle)),
+        bvh.triangles_.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO_);
 
@@ -175,8 +175,8 @@ void Viewport::rebuildScene()
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO_);
     glBufferData(
         GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(bvh.nodes.size() * sizeof(BVH::GPUNode)),
-        bvh.nodes.data(),
+        static_cast<long int>(bvh.nodes_.size() * sizeof(BVH::GPUNode)),
+        bvh.nodes_.data(),
         GL_STATIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
 

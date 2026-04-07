@@ -2,74 +2,74 @@
 
 #include "bvh.h"
 
-BVH::BVH(std::vector<GPUTriangle> &triangles) : triangles(triangles)
+BVH::BVH(std::vector<GPUTriangle> &triangles_) : triangles_(triangles_)
 {
     GPUNode node{};
-    node.left = 0;
-    node.right = 0;
-    node.triangleCount = static_cast<uint32_t>(triangles.size());
+    node.triangleCount = static_cast<uint32_t>(triangles_.size());
 
-    constexpr float numeric_max = std::numeric_limits<float>::max();
-    node.min = glm::vec4(numeric_max);
-    node.max = glm::vec4(-numeric_max);
+    for (const GPUTriangle &tri : triangles_)
+        growNodeToInclude(node, tri);
 
-    for (const GPUTriangle &tri : triangles)
-        BVH::growToInclude(node, tri);
-
-    nodes.reserve(2 * triangles.size());
-    nodes.push_back(node);
+    nodes_.reserve(2 * triangles_.size());
+    nodes_.push_back(node);
 
     split(0);
 
-    std::cout << "bvh built with: " << nodes.size() << " nodes\n";
+    std::cout << "bvh built with: " << nodes_.size() << " nodes_\n";
+}
+
+void BVH::growNodeToInclude(GPUNode &node, const glm::vec3 &point)
+{
+    node.min = glm::min(node.min, glm::vec4(point, 0));
+    node.max = glm::max(node.max, glm::vec4(point, 0));
+}
+
+void BVH::growNodeToInclude(GPUNode &node, const GPUTriangle &triangle)
+{
+    growNodeToInclude(node, triangle.a);
+    growNodeToInclude(node, triangle.b);
+    growNodeToInclude(node, triangle.c);
 }
 
 void BVH::split(const uint32_t nodeIndex, const size_t depth)
 {
-    GPUNode &node = nodes[nodeIndex];
+    GPUNode &node = nodes_[nodeIndex];
 
-    if (depth >= MAX_DEPTH || node.triangleCount <= LEAF_TRIANGLES)
+    if (depth >= BVH_MAX_DEPTH || node.triangleCount <= BVH_LEAF_TRIANGLES)
         return;
 
-    glm::vec3 size = node.max - node.min;
-    int splitAxis = 0;
-    if (size.y > size.x && size.y > size.z)
-        splitAxis = 1;
-    else if (size.z > size.x && size.z > size.y)
-        splitAxis = 2;
-
-    float splitPos = 0.5f * (node.min[splitAxis] + node.max[splitAxis]);
+    SplitResult splitResult = findBestSplit(node);
+    int splitAxis = splitResult.axis;
+    float splitPos = splitResult.pos;
 
     uint32_t begin = node.left;
     uint32_t end = begin + node.triangleCount;
     uint32_t mid = begin;
 
+    // puts triangles_[begin..mid) to the left and triangles_[mid..end) to the right
     for (uint32_t i = begin; i < end; i++)
     {
-        const GPUTriangle &tri = triangles[i];
+        const GPUTriangle &tri = triangles_[i];
         float center = (tri.a[splitAxis] + tri.b[splitAxis] + tri.c[splitAxis]) / 3.0f;
 
+        // put triangle at front of the range if to the left of the split plane
         if (center < splitPos)
-        {
-            std::swap(triangles[i], triangles[mid]);
-            mid++;
-        }
+            std::swap(triangles_[i], triangles_[mid++]);
     }
 
+    // prevents infinite recursion in the case of every triangle being on one side
     if (mid == begin || mid == end)
-    {
         mid = begin + (node.triangleCount / 2);
-    }
 
     uint32_t leftCount = mid - begin;
     uint32_t rightCount = end - mid;
 
-    uint32_t leftIdx = static_cast<uint32_t>(nodes.size());
-    nodes.emplace_back();
-    nodes.emplace_back();
+    uint32_t leftIdx = static_cast<uint32_t>(nodes_.size());
+    nodes_.emplace_back();
+    nodes_.emplace_back();
 
-    GPUNode &left = nodes[leftIdx];
-    GPUNode &right = nodes[leftIdx + 1];
+    GPUNode &left = nodes_[leftIdx];
+    GPUNode &right = nodes_[leftIdx + 1];
 
     left.left = begin;
     left.right = 0;
@@ -90,23 +90,97 @@ void BVH::split(const uint32_t nodeIndex, const size_t depth)
     right.max = glm::vec4(-numeric_max);
 
     for (uint32_t i = begin; i < mid; i++)
-        growToInclude(left, triangles[i]);
+        growNodeToInclude(left, triangles_[i]);
     for (uint32_t i = mid; i < end; i++)
-        growToInclude(right, triangles[i]);
+        growNodeToInclude(right, triangles_[i]);
 
     split(leftIdx, depth + 1);
     split(leftIdx + 1, depth + 1);
 }
 
-void BVH::growToInclude(GPUNode &node, glm::vec3 point)
+float BVH::surfaceArea(const glm::vec3 &min, const glm::vec3 &max) const
 {
-    node.min = glm::min(node.min, glm::vec4(point, 0));
-    node.max = glm::max(node.max, glm::vec4(point, 0));
+    glm::vec3 e = glm::vec3(max) - glm::vec3(min);
+    return 2.0f * (e.x * e.y + e.y * e.z + e.z * e.x);
 }
 
-void BVH::growToInclude(GPUNode &node, const GPUTriangle &triangle)
+float BVH::surfaceArea(const GPUNode &node) const
 {
-    BVH::growToInclude(node, triangle.a);
-    BVH::growToInclude(node, triangle.b);
-    BVH::growToInclude(node, triangle.c);
+    return surfaceArea(node.min, node.max);
+}
+
+void BVH::growBinToInclude(Bin &bin, const GPUTriangle &tri)
+{
+    bin.min = glm::min(bin.min, {tri.a, 0});
+    bin.min = glm::min(bin.min, {tri.b, 0});
+    bin.min = glm::min(bin.min, {tri.c, 0});
+    bin.max = glm::max(bin.max, {tri.a, 0});
+    bin.max = glm::max(bin.max, {tri.b, 0});
+    bin.max = glm::max(bin.max, {tri.c, 0});
+}
+
+BVH::SplitResult BVH::findBestSplit(const GPUNode &node)
+{
+    SplitResult best = {0, 0.0f, std::numeric_limits<float>::max()};
+
+    float parentArea = surfaceArea(node);
+
+    for (int axis = 0; axis < 3; axis++)
+    {
+        float axisMin = node.min[axis];
+        float axisMax = node.max[axis];
+        if (axisMax - axisMin < 1e-6f)
+            continue;
+
+        std::vector<Bin> bins(SAH_NUM_BINS);
+        float binSize = (axisMax - axisMin) / SAH_NUM_BINS;
+
+        uint32_t begin = node.left;
+        uint32_t end = begin + node.triangleCount;
+        for (uint32_t i = begin; i < end; i++)
+        {
+            float centroid = (triangles_[i].a[axis] + triangles_[i].b[axis] + triangles_[i].c[axis]) / 3.0f;
+            long unsigned int binIdx = static_cast<long unsigned int>(std::min(static_cast<int>((centroid - axisMin) / binSize), SAH_NUM_BINS - 1));
+            bins[binIdx].count++;
+            growBinToInclude(bins[binIdx], triangles_[i]);
+        }
+
+        // Evaluate all NUM_BINS-1 split positions
+        for (long unsigned int s = 1; s < SAH_NUM_BINS; s++)
+        {
+            // left
+            glm::vec4 lMin(std::numeric_limits<float>::max());
+            glm::vec4 lMax(-std::numeric_limits<float>::max());
+            long unsigned int lCount = 0;
+            for (long unsigned int b = 0; b < s; b++)
+            {
+                lMin = glm::min(lMin, bins[b].min);
+                lMax = glm::max(lMax, bins[b].max);
+                lCount += static_cast<long unsigned int>(bins[b].count);
+            }
+            // right
+            glm::vec4 rMin(std::numeric_limits<float>::max());
+            glm::vec4 rMax(-std::numeric_limits<float>::max());
+            long unsigned int rCount = 0;
+            for (long unsigned int b = s; b < SAH_NUM_BINS; b++)
+            {
+                rMin = glm::min(rMin, bins[b].min);
+                rMax = glm::max(rMax, bins[b].max);
+                rCount += static_cast<long unsigned int>(bins[b].count);
+            }
+
+            float cost = (static_cast<float>(lCount) * surfaceArea(lMin, lMax) +
+                          static_cast<float>(rCount) * surfaceArea(rMin, rMax)) /
+                         parentArea;
+
+            if (cost < best.cost)
+            {
+                best.cost = cost;
+                best.axis = axis;
+                best.pos = axisMin + static_cast<float>(s) * binSize;
+            }
+        }
+    }
+
+    return best;
 }
