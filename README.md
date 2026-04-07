@@ -12,7 +12,7 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
   <img src="gh_assets/modeltest.png" width="50%" />
 </p>
 
-## Features ✅
+## Features
 
 - Real-time Monte Carlo path tracing.
 - Ability to load .obj model files.
@@ -20,7 +20,7 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 - Helpful user interface.
 
 
-## Prerequisites 📝
+## Prerequisites
 
 - [A C++ Compiler](https://code.visualstudio.com/docs/languages/cpp#_install-a-compiler)
 - [CMake](https://cmake.org)
