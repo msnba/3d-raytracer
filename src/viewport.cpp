@@ -117,7 +117,7 @@ void Viewport::processGui()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    gui_->render({.accumFrameIndex_ = accumFrameIndex_, .deltaTime_ = deltaTime_, .fpsString_ = getFPS(), .fov_ = camera_->fov_});
+    gui_->render({.accumFrameIndex_ = accumFrameIndex_, .deltaTime_ = deltaTime_, .fpsString_ = getFPS(), .pIsScreenshot = &isScreenshot_, .fov_ = camera_->fov_});
 }
 
 void Viewport::rebuildScene()
@@ -237,7 +237,6 @@ std::string Viewport::getFPS()
     if (fpsTimer_ >= fpsInterval_)
     {
         fpsString_ = "FPS: " + std::to_string(static_cast<int>(static_cast<float>(fpsFrameCount_) / fpsTimer_));
-        // fpsString_ = std::to_string(gui_->get("test", 3.0f));
 
         fpsTimer_ = 0.0f;
         fpsFrameCount_ = 0;
@@ -335,9 +334,6 @@ void Viewport::scrollCallback(GLFWwindow *window, double xoffset, double yoffset
 {
     Viewport *instance = static_cast<Viewport *>(glfwGetWindowUserPointer(window));
 
-    if (instance)
-    {
-        instance->camera_->handleScrollInput(xoffset, yoffset);
+    if (instance && instance->camera_->handleScrollInput(xoffset, yoffset))
         instance->accumFrameIndex_ = 0;
-    }
 }

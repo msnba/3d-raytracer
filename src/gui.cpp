@@ -74,6 +74,10 @@ void GUI::render(const ViewportData &data)
             {
                 glfwSetWindowShouldClose(rawWindow_, true);
             }
+            if (ImGui::MenuItem("Screenshot", "F12") && data.pIsScreenshot)
+            {
+                *data.pIsScreenshot = true;
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))

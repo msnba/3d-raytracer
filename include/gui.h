@@ -23,7 +23,7 @@ struct ViewportData
     float fpsTimer_ = 0.0f;
     const float fpsInterval_ = 0.5f;
     std::string fpsString_;
-    bool isScreenshot_ = false;
+    bool *pIsScreenshot = nullptr;
     bool isPanning_ = false;
     bool isMoving_ = false;
     float fov_ = 90.0f;

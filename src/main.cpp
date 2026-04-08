@@ -23,8 +23,6 @@ int main()
     std::unique_ptr<GUI> gui = std::make_unique<GUI>(window->window, "./assets/defaults.cfg");
     std::shared_ptr scene = std::make_shared<Scene>();
 
-    gui->set("test", 1.0f);
-
     scene->meshes.push_back(loadMesh("assets/models/dragon.obj", GPUMaterial{{1.f, 1.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene->materials));
     scene->meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, *scene));
 

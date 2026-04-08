@@ -10,29 +10,54 @@ Camera::Camera(float fov, float speed, float yaw, float pitch, glm::vec3 cameraP
     normalize();
 }
 
-void Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
+bool Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
 {
+    bool isMoving = false;
     float velocity = speed_ * deltaTime;
 
     // movement
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
         cameraPos_ += velocity * glm::normalize(cameraFront_ * glm::vec3(1, 0, 1));
+        isMoving = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
         cameraPos_ -= velocity * glm::normalize(cameraFront_ * glm::vec3(1, 0, 1));
+        isMoving = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
         cameraPos_ -= velocity * glm::normalize(glm::cross(cameraFront_, glm::vec3(0, 1, 0)));
+        isMoving = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
         cameraPos_ += velocity * glm::normalize(glm::cross(cameraFront_, glm::vec3(0, 1, 0)));
+        isMoving = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    {
         cameraPos_ += velocity * glm::vec3(0, 1, 0);
+        isMoving = true;
+    }
     if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    {
         cameraPos_ -= velocity * glm::vec3(0, 1, 0);
+        isMoving = true;
+    }
+
+    return isMoving;
 }
 
-void Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)
+bool Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mouseY, float &mouseLastX, float &mouseLastY)
 {
     float xoffset = mouseX - mouseLastX;
     float yoffset = mouseLastY - mouseY; // y coords go from bottom to top
+
+    if (xoffset == 0 && yoffset == 0)
+        return false;
+
     mouseLastX = mouseX;
     mouseLastY = mouseY;
 
@@ -53,14 +78,21 @@ void Camera::handleMouseInput(uint32_t &accumFrameIndex, float mouseX, float mou
 
     if (xoffset != 0.0f || yoffset != 0.0f)
         accumFrameIndex = 0;
+
+    return true;
 }
 
-void Camera::handleScrollInput(double xoffset, double yoffset)
+bool Camera::handleScrollInput(double xoffset, double yoffset)
 {
-    float sensitivity = 2.5f;
+    static constexpr float sensitivity = 2.5f;
+
+    if ((fov_ <= 10.0f && yoffset > 0) || (fov_ >= 150.0f && yoffset < 0))
+        return false;
+
     fov_ = std::min(std::max(fov_ - sensitivity * static_cast<float>(yoffset), 10.f), 150.f);
 
     (void)xoffset;
+    return true;
 }
 
 void Camera::normalize()

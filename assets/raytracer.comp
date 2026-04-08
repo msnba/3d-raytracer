@@ -32,6 +32,11 @@ struct Collision {
     Material material;
 };
 
+struct Hit {
+    float distance;
+    uint triangleIdx;
+};
+
 struct Triangle {
     vec3 a;
     uint materialIdx;
@@ -109,45 +114,45 @@ Collision raySphere(Ray ray, Sphere s){
     return collision;
 }
 
-bool rayAABB(Ray ray, vec3 minB, vec3 maxB, float maxDist){
-    vec3 invDir = 1.0f / ray.direction;
-    vec3 t0 = (minB - ray.origin) * invDir;
-    vec3 t1 = (maxB - ray.origin) * invDir;
+float rayAABB(vec3 invDir, vec3 minB, vec3 maxB, float maxDist, vec3 origin){
+    vec3 t0 = (minB - origin) * invDir;
+    vec3 t1 = (maxB - origin) * invDir;
 
-    vec3 tmin = min(t0, t1);
-    vec3 tmax = max(t0, t1);
-    
-    float tNear = max(max(tmin.x, tmin.y), tmin.z);
-    float tFar = min(min(tmax.x, tmax.y), tmax.z);
+    vec3 tNear = min(t0, t1);
+    vec3 tFar = max(t0,t1);
 
-    return tFar >= max(tNear, 0.0) && tNear < maxDist;
+    float tN = max(tNear.x, max(tNear.y, tNear.z));
+
+    // explicitly calculated tF because it isn't used later
+    if(min(tFar.x, min(tFar.y, tFar.z)) < max(tN, 0.0) || tN >= maxDist) return 1e30; 
+    return tN;
 }
+
 // Moller-Trumbore algorithm
 // https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
 // adapted from https://stackoverflow.com/a/42752998
+// only called ONCE on the winning triangle in a set
 Collision rayTriangle(Ray ray, Triangle tri){
     Collision c;
     c.didHit = 0;
-
-    const float EPSILON = 0.0; // Don't know why you would keep this above 0
 
     vec3 edge1 = tri.b.xyz - tri.a.xyz;
     vec3 edge2 = tri.c.xyz - tri.a.xyz;
     vec3 normalVec = cross(edge1, edge2);
     float det = -dot(ray.direction, normalVec);
-    if(abs(det) < EPSILON) return c;
+    if(abs(det) < 0.0f) return c;
 
-    float invdet = 1.0f/det;
+    float invDet = 1.0f/det;
     vec3 ao = ray.origin - tri.a.xyz;
     vec3 dao = cross(ao, ray.direction);
-    float u = dot(edge2, dao) * invdet;
-    if(u < -EPSILON || u > 1.0 + EPSILON) return c;
+    float u = dot(edge2, dao) * invDet;
+    if(u < 0.0f || u > 1.0f) return c;
 
-    float v = -dot(edge1, dao) * invdet;
-    if(v < -EPSILON || u + v > 1.0 + EPSILON) return c;
+    float v = -dot(edge1, dao) * invDet;
+    if(v < 0.0f || u + v > 1.0f) return c;
 
-    float dist = dot(ao, normalVec) * invdet;
-    if(dist < EPSILON) return c;
+    float dist = dot(ao, normalVec) * invDet;
+    if(dist <= 0.0) return c;
 
     c.didHit = 1;
     c.hitPoint = ray.origin + ray.direction * dist;
@@ -158,10 +163,33 @@ Collision rayTriangle(Ray ray, Triangle tri){
     return c;
 }
 
+// shortened triangle test
+float rayTriangleDist(Ray ray, Triangle tri){
+    vec3 edge1 = tri.b.xyz - tri.a.xyz;
+    vec3 edge2 = tri.c.xyz - tri.a.xyz;
+    vec3 normalVec = cross(edge1, edge2);
+    float det = -dot(ray.direction, normalVec);
+    if(det == 0.0) return 1e30;
+
+    float invDet = 1.0f / det;
+    vec3 ao = ray.origin - tri.a.xyz;
+    vec3 dao = cross(ao, ray.direction);
+    float u = dot(edge2, dao) * invDet;
+    if(u < 0.0 || u > 1.0) return 1e30;
+
+    float v = -dot(edge1, dao) * invDet;
+    if(v < 0.0 || u + v > 1.0) return 1e30;
+
+    float dist = dot(ao, normalVec) * invDet;
+    return dist > 0.0 ? dist : 1e30;
+}
+
 Collision rayBVH(Ray ray){
-    Collision closest;
-    closest.didHit = 0;
-    closest.distance = 1e30;
+    Hit bestHit;
+    bestHit.distance = 1e30;
+    bestHit.triangleIdx = 0xFFFFFFFF;
+
+    vec3 invDir = 1.0f / ray.direction;
 
     uint stack[64];
     uint stackPtr = 0;
@@ -174,26 +202,42 @@ Collision rayBVH(Ray ray){
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
                 uint triangleIdx = node.left + i;
-                Collision c = rayTriangle(ray, triangles[triangleIdx]);
-                if(c.didHit == 1 && c.distance < closest.distance)
-                    closest = c;
+                float dist = rayTriangleDist(ray, triangles[triangleIdx]);
+                if(dist < bestHit.distance){
+                    bestHit.distance = dist;
+                    bestHit.triangleIdx = triangleIdx;
+                }
             }
         }else{
             BVHNode leftNode  = nodes[node.left];
             BVHNode rightNode = nodes[node.right];
+            
+            float hitLeft  = rayAABB(invDir, leftNode.min.xyz,  leftNode.max.xyz,  bestHit.distance, ray.origin);
+            float hitRight = rayAABB(invDir, rightNode.min.xyz, rightNode.max.xyz, bestHit.distance, ray.origin);
 
-            bool hitLeft  = rayAABB(ray, leftNode.min.xyz,  leftNode.max.xyz,  closest.distance);
-            bool hitRight = rayAABB(ray, rightNode.min.xyz, rightNode.max.xyz, closest.distance);
-
-            if(hitLeft && stackPtr < 64)
-                stack[stackPtr++] = node.left;
-
-            if(hitRight && stackPtr < 64)
-                stack[stackPtr++] = node.right;
+            // < 63 ensures room
+            if(hitLeft < 1e30 && hitRight < 1e30 && stackPtr < 63){ 
+                if(hitLeft < hitRight){ 
+                    stack[stackPtr++] = node.right;
+                    stack[stackPtr++] = node.left;
+                } else {
+                    stack[stackPtr++] = node.left;
+                    stack[stackPtr++] = node.right;
+                }
             }
-        }
+            else if(hitLeft  < 1e30 && stackPtr < 64) { stack[stackPtr++] = node.left; }
+            else if(hitRight < 1e30 && stackPtr < 64) { stack[stackPtr++] = node.right; }
 
-    return closest;
+        }
+    }
+
+    if(bestHit.triangleIdx != 0xFFFFFFFF)
+        return rayTriangle(ray, triangles[bestHit.triangleIdx]);
+    
+    Collision miss;
+    miss.didHit = 0;
+    miss.distance = 1e30;
+    return miss;
 }
 
 Collision calculateRayCollision(Ray ray)
@@ -224,17 +268,7 @@ float randomFloat(inout uint rng){
     return float(result) / 4294967295.0;
 }
 
-// PCG rng
-float randomNormalDistribution(inout uint rng){
-    float u = randomFloat(rng);
-
-    // normal dist
-    float theta = 2 * 3.1415926 * u;
-    float rho = sqrt(-2 * log(u));
-    return rho * cos(theta);
-}
-
-vec3 cosineHemisphereDirection(vec3 normal, inout uint rng){ // removes diffuse bias
+vec3 cosineHemisphereDirection(vec3 normal, inout uint rng){
     float u1 = randomFloat(rng);
     float u2 = randomFloat(rng);
 
@@ -297,7 +331,7 @@ uint hash(uint x) {
     x = ((x >> 16) ^ x) * 0x45d9f3b;
     x = (x >> 16) ^ x;
     return x;
-};
+}
 
 void main()
 {
