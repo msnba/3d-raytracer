@@ -65,11 +65,6 @@ struct BVHNode {
 
 // -- SSBOs --
 
-struct SceneData {
-    uint maxBounce;
-    uint numRaysPerPixel;
-};
-
 layout(std430, binding = 0) buffer Spheres {
     Sphere spheres[];
 };
@@ -87,7 +82,9 @@ layout(std430, binding = 3) buffer BVHNodes {
 };
 
 layout(std430, binding = 4) buffer Data {
-    SceneData sceneData;
+    uint maxBounce;
+    uint numRaysPerPixel;
+    uint SSAA;
 };
 
 // -- Functions --
@@ -293,7 +290,7 @@ vec3 trace(Ray ray, inout uint rng){
     vec3 incomingLight = vec3(0);
     vec3 rayColor = vec3(1.0f);
 
-    for(int i=0; i <= sceneData.maxBounce; i++){
+    for(int i=0; i <= maxBounce; i++){
         if(max(rayColor.r, max(rayColor.g, rayColor.b)) < 0.0001) break;
 
         Collision collision = calculateRayCollision(ray);
@@ -335,22 +332,9 @@ uint hash(uint x) {
 
 void main()
 {
-    // uint localIndex = gl_LocalInvocationIndex;
-    // if(localIndex < 8) {
-    //     shNodes[localIndex] = nodes[localIndex];
-    // }
-
-    // barrier();
-    // memoryBarrierShared();
-
-    uvec2 size = imageSize(accumImage);
     uvec2 pixel = gl_GlobalInvocationID.xy;
     if (pixel.x >= uint(resolution.x) || pixel.y >= uint(resolution.y))
         return;
-
-    vec2 uv = (vec2(pixel) + 0.5) / resolution;
-    vec2 screen = uv - 0.5;
-    screen.x *= resolution.x / resolution.y;
 
     uint rng = hash((pixel.y * uint(resolution.x) + pixel.x) ^ hash(frameIndex));
 
@@ -358,15 +342,26 @@ void main()
     vec3 right   = normalize(cross(forward, vec3(0,1,0)));
     vec3 up      = cross(right, forward);
 
-    Ray ray;
-    ray.origin = cameraPos;
-    ray.direction = normalize(1.0/tan(radians(fov) * .5) * forward + screen.x * right + screen.y * up); //fov correction
+    
 
     vec3 totalLight = vec3(0);
-    for (int i = 0; i < int(sceneData.numRaysPerPixel); i++) {
+    for (int i = 0; i < int(numRaysPerPixel); i++) {
+        vec2 uv = vec2(0.0);
+        vec2 jitter = vec2(0.0);
+        if(SSAA == 1)
+            jitter = vec2(randomFloat(rng), randomFloat(rng)) - 0.5;
+
+        uv = (vec2(pixel) + 0.5 + jitter) / resolution;
+        vec2 screen = uv - 0.5;
+        screen.x *= resolution.x / resolution.y;
+
+        Ray ray;
+        ray.origin = cameraPos;
+        ray.direction = normalize(1.0/tan(radians(fov) * .5) * forward + screen.x * right + screen.y * up); //fov correction
+
         totalLight += trace(ray, rng);
     }
-    totalLight /= sceneData.numRaysPerPixel;
+    totalLight /= numRaysPerPixel;
 
     if (frameIndex == 0) {
         imageStore(accumImage, ivec2(pixel), vec4(totalLight, 1.0));

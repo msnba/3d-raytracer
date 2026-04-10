@@ -21,13 +21,23 @@ public:
     void processGui();
     void processKeyInput();
 
-    void rebuildScene();
+    struct RebuildOptions
+    {
+        bool spheres = false;
+        bool materials = false;
+        bool geometry = false;
+        bool sceneData = false;
+        bool all = false;
+    };
+
+    void rebuildScene(const RebuildOptions &options);
 
     bool shouldClose() const;
     std::string getFPS();
 
 private:
     void saveScreenshot();
+    static void framebufferSizeCallback(GLFWwindow *window, int width, int height);
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
     static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
 

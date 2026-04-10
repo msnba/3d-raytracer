@@ -11,7 +11,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title, const
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // TODO: Handle resizing properly.
+    glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     if (fullscreen)
     {

@@ -29,8 +29,8 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
         throw std::runtime_error("Viewport created without a valid window.");
     }
 
+    glfwSetFramebufferSizeCallback(rawWindow_, framebufferSizeCallback);
     glfwSetWindowUserPointer(rawWindow_, this);
-
     glfwSetScrollCallback(rawWindow_, Viewport::scrollCallback);
     glDisable(GL_BLEND);
 
@@ -55,7 +55,7 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    rebuildScene();
+    rebuildScene({.all = true});
 }
 
 Viewport::~Viewport()
@@ -105,7 +105,7 @@ void Viewport::update()
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     if (!isPanning_ && !isMoving_)
         accumFrameIndex_++; // * Comment out to disable accumulation
-    else if (accumFrameIndex_ != 0)
+    else
         accumFrameIndex_ = 0;
     glfwSwapBuffers(rawWindow_);
     glfwPollEvents();
@@ -120,8 +120,10 @@ void Viewport::processGui()
     gui_->render({.accumFrameIndex_ = accumFrameIndex_, .deltaTime_ = deltaTime_, .fpsString_ = getFPS(), .pIsScreenshot = &isScreenshot_, .fov_ = camera_->fov_});
 }
 
-void Viewport::rebuildScene()
+void Viewport::rebuildScene(const RebuildOptions &options)
 {
+    accumFrameIndex_ = 0;
+
     std::shared_ptr<Scene> pScene = scene_.lock();
 
     if (!pScene)
@@ -130,74 +132,84 @@ void Viewport::rebuildScene()
         return;
     }
 
-    if (sphereSSBO_)
-        glDeleteBuffers(1, &sphereSSBO_);
-    glGenBuffers(1, &sphereSSBO_);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO_);
-    glBufferData(
-        GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(pScene->spheres.size() * sizeof(GPUSphere)),
-        pScene->spheres.data(),
-        GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
-
-    if (matSSBO_)
-        glDeleteBuffers(1, &matSSBO_);
-    glGenBuffers(1, &matSSBO_);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO_);
-    glBufferData(
-        GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(pScene->materials.size() * sizeof(GPUMaterial)),
-        pScene->materials.data(),
-        GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
-
-    std::vector<GPUTriangle> triangles;
-    std::vector<GPUMesh> gpuMeshes;
-    convertToGPUMeshes(*pScene, triangles, gpuMeshes);
-
-    BVH bvh(triangles);
-
-    if (triSSBO_)
-        glDeleteBuffers(1, &triSSBO_);
-    glGenBuffers(1, &triSSBO_);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO_);
-    glBufferData(
-        GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(bvh.triangles_.size() * sizeof(GPUTriangle)),
-        bvh.triangles_.data(),
-        GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO_);
-
-    if (bvhSSBO_)
-        glDeleteBuffers(1, &bvhSSBO_);
-    glGenBuffers(1, &bvhSSBO_);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO_);
-    glBufferData(
-        GL_SHADER_STORAGE_BUFFER,
-        static_cast<long int>(bvh.nodes_.size() * sizeof(BVH::GPUNode)),
-        bvh.nodes_.data(),
-        GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
-
-    struct GPUSceneData
+    if (options.spheres || options.all)
     {
-        uint32_t maxBounce;
-        uint32_t numRaysPerPixel;
-    } sceneData{5, 1};
+        if (sphereSSBO_)
+            glDeleteBuffers(1, &sphereSSBO_);
+        glGenBuffers(1, &sphereSSBO_);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO_);
+        glBufferData(
+            GL_SHADER_STORAGE_BUFFER,
+            static_cast<long int>(pScene->spheres.size() * sizeof(GPUSphere)),
+            pScene->spheres.data(),
+            GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
+    }
 
-    if (dataSSBO_)
-        glDeleteBuffers(1, &dataSSBO_);
-    glGenBuffers(1, &dataSSBO_);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, dataSSBO_);
-    glBufferData(
-        GL_SHADER_STORAGE_BUFFER,
-        sizeof(GPUSceneData),
-        &sceneData,
-        GL_STATIC_DRAW);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, dataSSBO_);
+    if (options.materials || options.all)
+    {
+        if (matSSBO_)
+            glDeleteBuffers(1, &matSSBO_);
+        glGenBuffers(1, &matSSBO_);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO_);
+        glBufferData(
+            GL_SHADER_STORAGE_BUFFER,
+            static_cast<long int>(pScene->materials.size() * sizeof(GPUMaterial)),
+            pScene->materials.data(),
+            GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
+    }
 
-    // -- Frame Accumulation --
+    if (options.geometry || options.all)
+    {
+        std::vector<GPUTriangle> triangles;
+        std::vector<GPUMesh> gpuMeshes;
+        convertToGPUMeshes(*pScene, triangles, gpuMeshes);
+        BVH bvh(triangles);
+        if (triSSBO_)
+            glDeleteBuffers(1, &triSSBO_);
+        glGenBuffers(1, &triSSBO_);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO_);
+        glBufferData(
+            GL_SHADER_STORAGE_BUFFER,
+            static_cast<long int>(bvh.triangles_.size() * sizeof(GPUTriangle)),
+            bvh.triangles_.data(),
+            GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO_);
+
+        if (bvhSSBO_)
+            glDeleteBuffers(1, &bvhSSBO_);
+        glGenBuffers(1, &bvhSSBO_);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO_);
+        glBufferData(
+            GL_SHADER_STORAGE_BUFFER,
+            static_cast<long int>(bvh.nodes_.size() * sizeof(BVH::GPUNode)),
+            bvh.nodes_.data(),
+            GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
+    }
+
+    if (options.sceneData || options.all)
+    {
+        struct GPUSceneData
+        {
+            uint32_t maxBounce;
+            uint32_t numRaysPerPixel;
+            uint32_t SSAA;
+        } sceneData{5, 1, 0};
+
+        if (dataSSBO_)
+            glDeleteBuffers(1, &dataSSBO_);
+        glGenBuffers(1, &dataSSBO_);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dataSSBO_);
+        glBufferData(
+            GL_SHADER_STORAGE_BUFFER,
+            sizeof(GPUSceneData),
+            &sceneData,
+            GL_STATIC_DRAW);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, dataSSBO_);
+    }
+
     glGenTextures(1, &accumTexture_);
     glBindTexture(GL_TEXTURE_2D, accumTexture_);
     glTexImage2D(
@@ -313,6 +325,40 @@ void Viewport::processKeyInput()
     camera_->handleKeyInput(rawWindow_, deltaTime_);
 
     isMoving_ = camera_->cameraPos_ != oldPos && !isMoving_;
+}
+
+void Viewport::framebufferSizeCallback(GLFWwindow *window, int width, int height)
+{
+    Viewport *instance = static_cast<Viewport *>(glfwGetWindowUserPointer(window));
+    if (instance)
+    {
+        instance->accumFrameIndex_ = 0;
+
+        instance->window_->SCR_WIDTH = static_cast<unsigned int>(width);
+        instance->window_->SCR_HEIGHT = static_cast<unsigned int>(height);
+        glViewport(0, 0, width, height);
+
+        glBindTexture(GL_TEXTURE_2D, instance->accumTexture_);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA32F,
+            width,
+            height,
+            0,
+            GL_RGBA,
+            GL_FLOAT,
+            nullptr);
+
+        glBindImageTexture(
+            0,
+            instance->accumTexture_,
+            0,
+            GL_FALSE,
+            0,
+            GL_READ_WRITE,
+            GL_RGBA32F);
+    }
 }
 
 void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)

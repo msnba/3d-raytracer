@@ -105,7 +105,7 @@ void GUI::render(const ViewportData &data)
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         std::stringstream stream;
-        stream << data.fpsString_ << "\nAccumulated Frames: " << data.accumFrameIndex_ << "\nFOV: " << data.fov_;
+        stream << data.fpsString_ << "\nSamples: " << data.accumFrameIndex_ << "\nFOV: " << data.fov_;
         ImGui::Text("%s", stream.str().c_str());
 
         ImGui::EndChild();
