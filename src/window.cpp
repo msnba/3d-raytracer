@@ -47,10 +47,38 @@ Window::Window(unsigned int width, unsigned int height, const char *title, const
         glfwTerminate();
         throw std::runtime_error("Failed to initialize GLAD\n");
     }
+
+    if (fullscreen)
+        toggleFullscreen();
 };
 
 Window::~Window()
 {
     glfwDestroyWindow(window);
     glfwTerminate();
+}
+
+void Window::toggleFullscreen()
+{
+    if (!isFullscreen_)
+    {
+        glfwGetWindowPos(window, &windowedX_, &windowedY_);
+        glfwGetFramebufferSize(window, &windowedWidth_, &windowedHeight_);
+
+        GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode *mode = glfwGetVideoMode(monitor);
+        glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+
+        SCR_WIDTH = static_cast<unsigned int>(mode->width);
+        SCR_HEIGHT = static_cast<unsigned int>(mode->height);
+    }
+    else
+    {
+        glfwSetWindowMonitor(window, nullptr, windowedX_, windowedY_, windowedWidth_, windowedHeight_, 0);
+
+        SCR_WIDTH = static_cast<unsigned int>(windowedWidth_);
+        SCR_HEIGHT = static_cast<unsigned int>(windowedHeight_);
+    }
+
+    isFullscreen_ = !isFullscreen_;
 }

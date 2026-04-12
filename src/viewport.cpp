@@ -2,12 +2,6 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
-#include <iomanip>
-#include <vector>
-#include <future>
-#include <stdexcept>
-#include <stdint.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -15,6 +9,14 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
+
+#include <iostream>
+#include <iomanip>
+#include <vector>
+#include <future>
+#include <stdexcept>
+#include <stdint.h>
+#include <functional>
 
 #include "viewport.h"
 #include "bvh.h"
@@ -54,6 +56,30 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
+
+    gui_->setCallbacks({.onMaxBounceChanged = [this](uint32_t maxBounce)
+                        { 
+                            maxBounce_ = maxBounce; 
+                            rebuildScene({.sceneData = true}); },
+
+                        .onRaysPerPixelChanged = [this](uint32_t numRaysPerPixel)
+                        { 
+                            numRaysPerPixel_ = numRaysPerPixel; 
+                            rebuildScene({.sceneData = true}); },
+
+                        .onSSAAChanged = [this](bool isSSAAEnabled)
+                        { 
+                            isSSAAEnabled_ = isSSAAEnabled ? 1 : 0; 
+                            rebuildScene({.sceneData = true}); },
+
+                        .onScreenshot = [this]()
+                        { isScreenshot_ = true; },
+
+                        .onToggleFullscreen = [this]()
+                        { fullscreenPressed_ = true; },
+
+                        .onAccumulationChanged = [this](bool isAccumulationEnabled)
+                        { isAccumulationEnabled_ = isAccumulationEnabled; }});
 
     rebuildScene({.all = true});
 }
@@ -101,10 +127,16 @@ void Viewport::update()
     if (isScreenshot_)
         saveScreenshot();
 
+    if (fullscreenPressed_ && !isFullscreen_)
+    {
+        isFullscreen_ = true;
+        toggleFullscreen();
+    }
+
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    if (!isPanning_ && !isMoving_)
-        accumFrameIndex_++; // * Comment out to disable accumulation
+    if (isAccumulationEnabled_ && !isPanning_ && !isMoving_)
+        accumFrameIndex_++;
     else
         accumFrameIndex_ = 0;
     glfwSwapBuffers(rawWindow_);
@@ -117,7 +149,7 @@ void Viewport::processGui()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    gui_->render({.accumFrameIndex_ = accumFrameIndex_, .deltaTime_ = deltaTime_, .fpsString_ = getFPS(), .pIsScreenshot = &isScreenshot_, .fov_ = camera_->fov_});
+    gui_->render({.accumFrameIndex = accumFrameIndex_, .fpsString = getFPS(), .fov = camera_->fov_});
 }
 
 void Viewport::rebuildScene(const RebuildOptions &options)
@@ -196,7 +228,7 @@ void Viewport::rebuildScene(const RebuildOptions &options)
             uint32_t maxBounce;
             uint32_t numRaysPerPixel;
             uint32_t SSAA;
-        } sceneData{5, 1, 0};
+        } sceneData{maxBounce_, numRaysPerPixel_, isSSAAEnabled_};
 
         if (dataSSBO_)
             glDeleteBuffers(1, &dataSSBO_);
@@ -290,11 +322,26 @@ void Viewport::saveScreenshot()
         .detach();
 }
 
+void Viewport::toggleFullscreen()
+{
+    if (!isFullscreen_)
+        return;
+
+    window_->toggleFullscreen();
+    accumFrameIndex_ = 0;
+}
+
 void Viewport::processKeyInput()
 {
     // Keybinds
     if (glfwGetKey(rawWindow_, GLFW_KEY_Q) == GLFW_PRESS && (glfwGetKey(rawWindow_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(rawWindow_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)) // Ctrl + Q
         glfwSetWindowShouldClose(rawWindow_, true);
+
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F11)) // F11
+        fullscreenPressed_ = true;
+
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F11) == GLFW_RELEASE)
+        fullscreenPressed_ = false;
 
     if (glfwGetKey(rawWindow_, GLFW_KEY_F12) == GLFW_PRESS && !isScreenshot_ && !screenshotInProgress_)
         isScreenshot_ = true;

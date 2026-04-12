@@ -6,6 +6,7 @@
 #include <variant>
 #include <stdexcept>
 #include <memory>
+#include <functional>
 
 #include "window.h"
 
@@ -15,18 +16,20 @@ using SettingValue = std::variant<int, float, bool, std::string>;
 //  TODO: refactor vieport data
 struct ViewportData
 {
-    uint32_t accumFrameIndex_ = 0;
-    float deltaTime_ = 0.0f;
-    float lastFrame_ = 0.0f;
-    int fpsFrameCount_ = 0;
-    float lastFPS_ = 0.0f;
-    float fpsTimer_ = 0.0f;
-    const float fpsInterval_ = 0.5f;
-    std::string fpsString_;
-    bool *pIsScreenshot = nullptr;
-    bool isPanning_ = false;
-    bool isMoving_ = false;
-    float fov_ = 90.0f;
+    uint32_t accumFrameIndex = 0;
+    const float fpsInterval = 0.5f;
+    std::string fpsString;
+    float fov = 90.0f;
+};
+
+struct ViewportCallbacks
+{
+    std::function<void(uint32_t)> onMaxBounceChanged = nullptr;
+    std::function<void(uint32_t)> onRaysPerPixelChanged = nullptr;
+    std::function<void(bool)> onSSAAChanged = nullptr;
+    std::function<void()> onScreenshot = nullptr;
+    std::function<void()> onToggleFullscreen = nullptr;
+    std::function<void(bool)> onAccumulationChanged = nullptr;
 };
 
 class GUI
@@ -42,6 +45,8 @@ public:
     GUI &operator=(GUI &&other) noexcept;
 
     void render(const ViewportData &data);
+
+    void setCallbacks(const ViewportCallbacks &callbacks);
     bool loadSettings(const std::string &filepath);
     bool saveSettings(const std::string &filepath);
 
@@ -70,6 +75,7 @@ private:
 
     std::unordered_map<std::string, SettingValue> settingsMap_;
     GLFWwindow *rawWindow_ = nullptr;
+    ViewportCallbacks callbacks_{};
 
     float guiScale_ = 1.0f;
     bool showTopBar_ = true;

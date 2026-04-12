@@ -37,6 +37,7 @@ public:
 
 private:
     void saveScreenshot();
+    void toggleFullscreen();
     static void framebufferSizeCallback(GLFWwindow *window, int width, int height);
     static void cursorPosCallback(GLFWwindow *window, double xposd, double yposd);
     static void scrollCallback(GLFWwindow *window, double xoffset, double yoffset);
@@ -59,6 +60,10 @@ private:
     unsigned int bvhSSBO_ = 0;
     unsigned int dataSSBO_ = 0;
 
+    uint32_t maxBounce_ = 5;
+    uint32_t numRaysPerPixel_ = 1;
+    uint32_t isSSAAEnabled_ = 0;
+
     uint32_t accumFrameIndex_ = 0;
     float deltaTime_ = 0.0f;
     float lastFrame_ = 0.0f;
@@ -71,9 +76,12 @@ private:
     float mouseLastX_ = 0.0f;
     float mouseLastY_ = 0.0f;
 
+    bool isAccumulationEnabled_ = true;
     bool isScreenshot_ = false;
+    bool isFullscreen_ = false;
     bool isPanning_ = false;
     bool isMoving_ = false;
 
     std::atomic<bool> screenshotInProgress_ = false;
+    bool fullscreenPressed_ = false;
 };

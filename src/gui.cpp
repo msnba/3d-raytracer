@@ -60,6 +60,13 @@ GUI &GUI::operator=(GUI &&other) noexcept
 
 void GUI::render(const ViewportData &data)
 {
+    static bool showDebug = true;
+    static bool showProperties = true;
+    static bool isAccumulationEnabled = true;
+    static bool isSSAAEnabled = true;
+    static int maxBounce = 5;
+    static int raysPerPixel = 1;
+
     // Menu Bar
     ImGui::PushStyleColor(ImGuiCol_MenuBarBg, {});
     ImGui::PushStyleColor(ImGuiCol_WindowBg, {0, 0, 0, .25f});
@@ -71,18 +78,20 @@ void GUI::render(const ViewportData &data)
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Quit", "Ctrl+Q"))
-            {
                 glfwSetWindowShouldClose(rawWindow_, true);
-            }
-            if (ImGui::MenuItem("Screenshot", "F12") && data.pIsScreenshot)
-            {
-                *data.pIsScreenshot = true;
-            }
+
+            if (ImGui::MenuItem("Screenshot", "F12") && callbacks_.onScreenshot)
+                callbacks_.onScreenshot();
+
+            if (ImGui::MenuItem("Toggle Fullscreen", "F11") && callbacks_.onToggleFullscreen)
+                callbacks_.onToggleFullscreen();
+
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))
         {
-            ImGui::MenuItem("Show Stats", nullptr, &showStats_);
+            ImGui::MenuItem("Show Debug Panel", nullptr, &showDebug);
+            ImGui::MenuItem("Show Properties Panel", nullptr, &showProperties);
             ImGui::EndMenu();
         }
 
@@ -92,20 +101,20 @@ void GUI::render(const ViewportData &data)
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
 
-    if (showStats_)
+    if (showDebug)
     {
         float menuBarHeight = ImGui::GetFrameHeight(); // avoids overlapping top bar
         ImGui::SetNextWindowPos({0, menuBarHeight}, ImGuiCond_Appearing);
         ImGui::SetNextWindowSize({180.0f * guiScale_, 100.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Stats Panel", nullptr);
+        ImGui::Begin("Debug Panel", nullptr);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
-        ImGui::BeginChild("##stats_scroll", {0, 0}, false,
+        ImGui::BeginChild("##scroll", {0, 0}, false,
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         std::stringstream stream;
-        stream << data.fpsString_ << "\nSamples: " << data.accumFrameIndex_ << "\nFOV: " << data.fov_;
+        stream << data.fpsString << "\nSamples: " << data.accumFrameIndex << "\nFOV: " << data.fov;
         ImGui::Text("%s", stream.str().c_str());
 
         ImGui::EndChild();
@@ -114,6 +123,59 @@ void GUI::render(const ViewportData &data)
 
         ImGui::End();
     }
+
+    if (showProperties)
+    {
+        float menuBarHeight = ImGui::GetFrameHeight();
+        ImGui::SetNextWindowPos({0, menuBarHeight + 100.0f * guiScale_}, ImGuiCond_Appearing);
+
+        ImGui::SetNextWindowSize({200.0f * guiScale_, 200.0f * guiScale_}, ImGuiCond_Appearing);
+
+        ImGui::Begin("Properties Panel", nullptr);
+
+        ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
+        ImGui::BeginChild("##scroll", {0, 0}, false,
+                          ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::SeparatorText("Global Settings");
+
+        if (ImGui::Checkbox("Accumulation Enabled", &isAccumulationEnabled) && callbacks_.onAccumulationChanged)
+            callbacks_.onAccumulationChanged(isAccumulationEnabled);
+
+        if (ImGui::Checkbox("SSAA Enabled", &isSSAAEnabled) && callbacks_.onSSAAChanged)
+            callbacks_.onSSAAChanged(isSSAAEnabled);
+
+        if (callbacks_.onMaxBounceChanged)
+        {
+            ImGui::Text("Max Ray Bounces");
+            if (ImGui::InputInt("", &maxBounce))
+            {
+                maxBounce = std::max(maxBounce, 0);
+                callbacks_.onMaxBounceChanged(static_cast<uint32_t>(maxBounce));
+            }
+        }
+
+        if (callbacks_.onRaysPerPixelChanged)
+        {
+            ImGui::Text("Rays Per Pixel");
+            if (ImGui::InputInt("", &raysPerPixel))
+            {
+                raysPerPixel = std::max(raysPerPixel, 0);
+                callbacks_.onRaysPerPixelChanged(static_cast<uint32_t>(raysPerPixel));
+            }
+        }
+
+        ImGui::EndChild();
+
+        ImGui::PopStyleColor(1);
+
+        ImGui::End();
+    }
+}
+
+void GUI::setCallbacks(const ViewportCallbacks &callbacks)
+{
+    callbacks_ = callbacks;
 }
 
 bool GUI::loadSettings(const std::string &filepath)
