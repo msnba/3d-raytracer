@@ -1,12 +1,14 @@
 #pragma once
 
-#include <GLFW/glfw3.h>
 #include <unordered_map>
 #include <string>
 #include <variant>
 #include <stdexcept>
 #include <memory>
 #include <functional>
+
+#include <GLFW/glfw3.h>
+#include <imgui.h>
 
 #include "window.h"
 
@@ -41,10 +43,11 @@ public:
     ~GUI();
     GUI(const GUI &) = delete;
     GUI &operator=(const GUI &) = delete;
-    GUI(GUI &&other) noexcept;
-    GUI &operator=(GUI &&other) noexcept;
+    GUI(GUI &&other);
+    GUI &operator=(GUI &&other);
 
     void render(const ViewportData &data);
+    bool toggleRender();
 
     void setCallbacks(const ViewportCallbacks &callbacks);
     bool loadSettings(const std::string &filepath);
@@ -76,8 +79,9 @@ private:
     std::unordered_map<std::string, SettingValue> settingsMap_;
     GLFWwindow *rawWindow_ = nullptr;
     ViewportCallbacks callbacks_{};
+    ImFont *currentFont_ = nullptr;
 
     float guiScale_ = 1.0f;
+    bool renderGui_ = true;
     bool showTopBar_ = true;
-    bool showStats_ = true;
 };

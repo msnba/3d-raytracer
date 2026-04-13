@@ -13,7 +13,12 @@ GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWin
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+
     ImGuiIO &io = ImGui::GetIO();
+
+    ImGui_ImplGlfw_InitForOpenGL(rawWindow, true);
+    ImGui_ImplOpenGL3_Init("#version 430");
+
     io.IniFilename = nullptr; // Disables ini saving beside the executable
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -21,13 +26,17 @@ GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWin
     glfwGetFramebufferSize(rawWindow_, &w, &h);
     guiScale_ = static_cast<float>(h) / 1080.0f;
 
+    currentFont_ = io.Fonts->AddFontFromFileTTF("assets/fonts/Inter.ttf", 14.0f * guiScale_);
     ImGui::GetStyle().ScaleAllSizes(guiScale_);
-    // ImGui::GetIO().FontGlobalScale = guiScale_;
+    io.FontGlobalScale = 1.0f;
+
+    if (!currentFont_)
+    {
+        io.Fonts->AddFontDefault();
+        currentFont_ = nullptr;
+    }
 
     ImGui::StyleColorsDark();
-
-    ImGui_ImplGlfw_InitForOpenGL(rawWindow, true);
-    ImGui_ImplOpenGL3_Init("#version 430");
 
     if (!loadSettings(filepath))
         throw std::runtime_error("Settings at file \"" + filepath + "\" cannot be loaded.");
@@ -38,12 +47,12 @@ GUI::~GUI()
     destroySelf();
 }
 
-GUI::GUI(GUI &&other) noexcept : settingsMap_(std::move(other.settingsMap_)), rawWindow_(other.rawWindow_), guiScale_(other.guiScale_)
+GUI::GUI(GUI &&other) : settingsMap_(std::move(other.settingsMap_)), rawWindow_(other.rawWindow_), guiScale_(other.guiScale_)
 {
     other.rawWindow_ = nullptr;
 }
 
-GUI &GUI::operator=(GUI &&other) noexcept
+GUI &GUI::operator=(GUI &&other)
 {
     if (this != &other)
     {
@@ -60,10 +69,14 @@ GUI &GUI::operator=(GUI &&other) noexcept
 
 void GUI::render(const ViewportData &data)
 {
+    if (!renderGui_)
+        return;
+
     static bool showDebug = true;
-    static bool showProperties = true;
+    static bool showSettings = true;
     static bool isAccumulationEnabled = true;
-    static bool isSSAAEnabled = true;
+    static bool isSSAAEnabled = false;
+    static bool isVSyncEnabled = true;
     static int maxBounce = 5;
     static int raysPerPixel = 1;
 
@@ -73,6 +86,7 @@ void GUI::render(const ViewportData &data)
     ImGui::PushStyleColor(ImGuiCol_BorderShadow, {});
     ImGui::PushStyleColor(ImGuiCol_Border, {});
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
+    ImGui::PushFont(currentFont_);
     if (ImGui::BeginMainMenuBar() && showTopBar_)
     {
         if (ImGui::BeginMenu("File"))
@@ -91,7 +105,7 @@ void GUI::render(const ViewportData &data)
         if (ImGui::BeginMenu("View"))
         {
             ImGui::MenuItem("Show Debug Panel", nullptr, &showDebug);
-            ImGui::MenuItem("Show Properties Panel", nullptr, &showProperties);
+            ImGui::MenuItem("Show Settings Panel", nullptr, &showSettings);
             ImGui::EndMenu();
         }
 
@@ -107,10 +121,10 @@ void GUI::render(const ViewportData &data)
         ImGui::SetNextWindowPos({0, menuBarHeight}, ImGuiCond_Appearing);
         ImGui::SetNextWindowSize({180.0f * guiScale_, 100.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Debug Panel", nullptr);
+        ImGui::Begin("Debug Panel", nullptr, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
-        ImGui::BeginChild("##scroll", {0, 0}, false,
+        ImGui::BeginChild("##scrollDebug", {0, 0}, false,
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         std::stringstream stream;
@@ -124,31 +138,34 @@ void GUI::render(const ViewportData &data)
         ImGui::End();
     }
 
-    if (showProperties)
+    if (showSettings)
     {
         float menuBarHeight = ImGui::GetFrameHeight();
         ImGui::SetNextWindowPos({0, menuBarHeight + 100.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::SetNextWindowSize({200.0f * guiScale_, 200.0f * guiScale_}, ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize({200.0f * guiScale_, 230.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Properties Panel", nullptr);
+        ImGui::Begin("Settings Panel", nullptr, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
-        ImGui::BeginChild("##scroll", {0, 0}, false,
+        ImGui::BeginChild("##scrollSettings", {0, 0}, false,
                           ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-        ImGui::SeparatorText("Global Settings");
+        ImGui::SeparatorText("Render Settings");
 
-        if (ImGui::Checkbox("Accumulation Enabled", &isAccumulationEnabled) && callbacks_.onAccumulationChanged)
+        if (ImGui::Checkbox("Frame Accumulation Enabled", &isAccumulationEnabled) && callbacks_.onAccumulationChanged)
             callbacks_.onAccumulationChanged(isAccumulationEnabled);
 
         if (ImGui::Checkbox("SSAA Enabled", &isSSAAEnabled) && callbacks_.onSSAAChanged)
             callbacks_.onSSAAChanged(isSSAAEnabled);
 
+        if (ImGui::Checkbox("VSync Enabled", &isVSyncEnabled))
+            glfwSwapInterval(isVSyncEnabled ? 1 : 0);
+
         if (callbacks_.onMaxBounceChanged)
         {
             ImGui::Text("Max Ray Bounces");
-            if (ImGui::InputInt("", &maxBounce))
+            if (ImGui::InputInt("##maxBounce", &maxBounce))
             {
                 maxBounce = std::max(maxBounce, 0);
                 callbacks_.onMaxBounceChanged(static_cast<uint32_t>(maxBounce));
@@ -158,7 +175,7 @@ void GUI::render(const ViewportData &data)
         if (callbacks_.onRaysPerPixelChanged)
         {
             ImGui::Text("Rays Per Pixel");
-            if (ImGui::InputInt("", &raysPerPixel))
+            if (ImGui::InputInt("##raysPerPixel", &raysPerPixel))
             {
                 raysPerPixel = std::max(raysPerPixel, 0);
                 callbacks_.onRaysPerPixelChanged(static_cast<uint32_t>(raysPerPixel));
@@ -171,6 +188,13 @@ void GUI::render(const ViewportData &data)
 
         ImGui::End();
     }
+    ImGui::PopFont();
+}
+
+bool GUI::toggleRender()
+{
+    renderGui_ = !renderGui_;
+    return renderGui_;
 }
 
 void GUI::setCallbacks(const ViewportCallbacks &callbacks)

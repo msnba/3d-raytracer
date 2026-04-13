@@ -40,7 +40,7 @@ Window::Window(unsigned int width, unsigned int height, const char *title, const
     }
 
     glfwMakeContextCurrent(window); // ! Window must be contextualized before GLAD initialization.
-    glfwSwapInterval(0);            // Turns off V-Sync
+    glfwSwapInterval(1);            // V-Sync Enabled
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {

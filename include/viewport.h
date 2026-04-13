@@ -21,16 +21,18 @@ public:
     void processGui();
     void processKeyInput();
 
-    struct RebuildOptions
+    enum class RebuildFlags : uint8_t
     {
-        bool spheres = false;
-        bool materials = false;
-        bool geometry = false;
-        bool sceneData = false;
-        bool all = false;
+        None = 0,
+        Spheres = 1 << 0,
+        Materials = 1 << 1,
+        Geometry = 1 << 2,
+        SceneData = 1 << 3,
+        Transforms = 1 << 4,
+        All = 0xFF
     };
 
-    void rebuildScene(const RebuildOptions &options);
+    void rebuildScene(RebuildFlags flags);
 
     bool shouldClose() const;
     std::string getFPS();
@@ -85,3 +87,18 @@ private:
     std::atomic<bool> screenshotInProgress_ = false;
     bool fullscreenPressed_ = false;
 };
+
+inline Viewport::RebuildFlags operator|(Viewport::RebuildFlags a, Viewport::RebuildFlags b)
+{
+    return static_cast<Viewport::RebuildFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+}
+
+inline Viewport::RebuildFlags operator&(Viewport::RebuildFlags a, Viewport::RebuildFlags b)
+{
+    return static_cast<Viewport::RebuildFlags>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+}
+
+inline bool hasFlag(Viewport::RebuildFlags a, Viewport::RebuildFlags b)
+{
+    return (a & b) != Viewport::RebuildFlags::None;
+}

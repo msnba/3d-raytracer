@@ -58,30 +58,21 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     glEnableVertexAttribArray(0);
 
     gui_->setCallbacks({.onMaxBounceChanged = [this](uint32_t maxBounce)
-                        { 
-                            maxBounce_ = maxBounce; 
-                            rebuildScene({.sceneData = true}); },
-
+                        { maxBounce_ = maxBounce; rebuildScene(RebuildFlags::SceneData); },
                         .onRaysPerPixelChanged = [this](uint32_t numRaysPerPixel)
-                        { 
-                            numRaysPerPixel_ = numRaysPerPixel; 
-                            rebuildScene({.sceneData = true}); },
-
+                        { numRaysPerPixel_ = numRaysPerPixel; rebuildScene({RebuildFlags::SceneData}); },
                         .onSSAAChanged = [this](bool isSSAAEnabled)
-                        { 
-                            isSSAAEnabled_ = isSSAAEnabled ? 1 : 0; 
-                            rebuildScene({.sceneData = true}); },
-
+                        { isSSAAEnabled_ = isSSAAEnabled ? 1 : 0; rebuildScene(RebuildFlags::SceneData); },
                         .onScreenshot = [this]()
                         { isScreenshot_ = true; },
-
                         .onToggleFullscreen = [this]()
                         { fullscreenPressed_ = true; },
-
                         .onAccumulationChanged = [this](bool isAccumulationEnabled)
-                        { isAccumulationEnabled_ = isAccumulationEnabled; }});
+                        { isAccumulationEnabled_ = isAccumulationEnabled; }
 
-    rebuildScene({.all = true});
+    });
+
+    rebuildScene(RebuildFlags::All);
 }
 
 Viewport::~Viewport()
@@ -152,19 +143,16 @@ void Viewport::processGui()
     gui_->render({.accumFrameIndex = accumFrameIndex_, .fpsString = getFPS(), .fov = camera_->fov_});
 }
 
-void Viewport::rebuildScene(const RebuildOptions &options)
+void Viewport::rebuildScene(RebuildFlags flags)
 {
     accumFrameIndex_ = 0;
 
     std::shared_ptr<Scene> pScene = scene_.lock();
 
     if (!pScene)
-    {
-        std::cerr << "Locking scene failed during rebuild!\n";
-        return;
-    }
+        throw std::runtime_error("Locking scene failed during rebuild.");
 
-    if (options.spheres || options.all)
+    if (hasFlag(flags, RebuildFlags::Spheres))
     {
         if (sphereSSBO_)
             glDeleteBuffers(1, &sphereSSBO_);
@@ -178,7 +166,7 @@ void Viewport::rebuildScene(const RebuildOptions &options)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
     }
 
-    if (options.materials || options.all)
+    if (hasFlag(flags, RebuildFlags::Spheres))
     {
         if (matSSBO_)
             glDeleteBuffers(1, &matSSBO_);
@@ -192,7 +180,7 @@ void Viewport::rebuildScene(const RebuildOptions &options)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
     }
 
-    if (options.geometry || options.all)
+    if (hasFlag(flags, RebuildFlags::Geometry))
     {
         std::vector<GPUTriangle> triangles;
         std::vector<GPUMesh> gpuMeshes;
@@ -221,7 +209,7 @@ void Viewport::rebuildScene(const RebuildOptions &options)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
     }
 
-    if (options.sceneData || options.all)
+    if (hasFlag(flags, RebuildFlags::SceneData))
     {
         struct GPUSceneData
         {
@@ -333,11 +321,21 @@ void Viewport::toggleFullscreen()
 
 void Viewport::processKeyInput()
 {
+    static bool F1Pressed = false;
     // Keybinds
     if (glfwGetKey(rawWindow_, GLFW_KEY_Q) == GLFW_PRESS && (glfwGetKey(rawWindow_, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(rawWindow_, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS)) // Ctrl + Q
         glfwSetWindowShouldClose(rawWindow_, true);
 
-    if (glfwGetKey(rawWindow_, GLFW_KEY_F11)) // F11
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F1) == GLFW_PRESS && !F1Pressed)
+    {
+        F1Pressed = true;
+        gui_->toggleRender();
+    }
+
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F1) == GLFW_RELEASE)
+        F1Pressed = false;
+
+    if (glfwGetKey(rawWindow_, GLFW_KEY_F11) == GLFW_PRESS) // F11
         fullscreenPressed_ = true;
 
     if (glfwGetKey(rawWindow_, GLFW_KEY_F11) == GLFW_RELEASE)

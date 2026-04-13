@@ -36,14 +36,14 @@ bool Camera::handleKeyInput(GLFWwindow *window, float deltaTime)
         cameraPos_ += velocity * glm::normalize(glm::cross(cameraFront_, glm::vec3(0, 1, 0)));
         isMoving = true;
     }
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-    {
-        cameraPos_ += velocity * glm::vec3(0, 1, 0);
-        isMoving = true;
-    }
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
     {
         cameraPos_ -= velocity * glm::vec3(0, 1, 0);
+        isMoving = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    {
+        cameraPos_ += velocity * glm::vec3(0, 1, 0);
         isMoving = true;
     }
 
