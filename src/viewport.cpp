@@ -22,6 +22,7 @@
 #include "bvh.h"
 #include "gui.h"
 #include "shader_sources.h"
+#include "log.h"
 
 Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene), rawWindow_(window_->window), passthrough_(PASS_VERT, PASS_FRAG), raytrace_(RAYTRACER_COMP)
 {
@@ -145,6 +146,8 @@ void Viewport::processGui()
 
 void Viewport::rebuildScene(RebuildFlags flags)
 {
+    Log::info("rebuilt scene");
+
     accumFrameIndex_ = 0;
 
     std::shared_ptr<Scene> pScene = scene_.lock();
@@ -328,6 +331,7 @@ void Viewport::processKeyInput()
 
     if (glfwGetKey(rawWindow_, GLFW_KEY_F1) == GLFW_PRESS && !F1Pressed)
     {
+        Log::info("f1 pressed");
         F1Pressed = true;
         gui_->toggleRender();
     }
