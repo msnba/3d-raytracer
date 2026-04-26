@@ -9,6 +9,7 @@
 #include "window.h"
 #include "gui.h"
 #include "log.h"
+#include "inter_font.h"
 
 GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWindow)
 {
@@ -27,7 +28,11 @@ GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWin
     glfwGetFramebufferSize(rawWindow_, &w, &h);
     guiScale_ = static_cast<float>(h) / 1080.0f;
 
-    currentFont_ = io.Fonts->AddFontFromFileTTF("assets/fonts/Inter.ttf", 14.0f * guiScale_);
+    currentFont_ = io.Fonts->AddFontFromMemoryCompressedTTF(
+        Inter_compressed_data,
+        Inter_compressed_size,
+        14.0f * guiScale_);
+
     ImGui::GetStyle().ScaleAllSizes(guiScale_);
     io.FontGlobalScale = 1.0f;
 
@@ -75,7 +80,7 @@ void GUI::render(const ViewportData &data)
 
     static bool showDebug = true;
     static bool showSettings = true;
-    static bool showLog = false;
+    static bool showLog = true;
     static bool isAccumulationEnabled = true;
     static bool isSSAAEnabled = false;
     static bool isVSyncEnabled = true;
@@ -99,8 +104,8 @@ void GUI::render(const ViewportData &data)
             if (ImGui::MenuItem("Screenshot", "F12") && callbacks_.onScreenshot)
                 callbacks_.onScreenshot();
 
-            if (ImGui::MenuItem("Toggle Fullscreen", "F11") && callbacks_.onToggleFullscreen)
-                callbacks_.onToggleFullscreen();
+            // if (ImGui::MenuItem("Toggle Fullscreen", "F11") && callbacks_.onToggleFullscreen)
+            //     callbacks_.onToggleFullscreen();
 
             ImGui::EndMenu();
         }
@@ -124,7 +129,7 @@ void GUI::render(const ViewportData &data)
         ImGui::SetNextWindowPos({0, menuBarHeight}, ImGuiCond_Appearing);
         ImGui::SetNextWindowSize({180.0f * guiScale_, 100.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse);
+        ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
         ImGui::BeginChild("##scrollDebug", {0, 0}, false,
@@ -148,7 +153,7 @@ void GUI::render(const ViewportData &data)
 
         ImGui::SetNextWindowSize({200.0f * guiScale_, 230.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse);
+        ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
         ImGui::BeginChild("##scrollSettings", {0, 0}, false,
@@ -199,7 +204,7 @@ void GUI::render(const ViewportData &data)
 
         ImGui::SetNextWindowSize({420.0f * guiScale_, 230.0f * guiScale_}, ImGuiCond_Appearing);
 
-        ImGui::Begin("Log", nullptr, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoCollapse);
+        ImGui::Begin("Log", nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
 
         ImGui::PushStyleColor(ImGuiCol_ScrollbarBg, {0, 0, 0, 0});
         ImGui::BeginChild("##scrollLog", {0, 0}, false,

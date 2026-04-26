@@ -23,8 +23,24 @@ int main()
     std::unique_ptr<GUI> gui = std::make_unique<GUI>(window->window, "./assets/defaults.cfg");
     std::shared_ptr scene = std::make_shared<Scene>();
 
-    scene->meshes.push_back(loadMesh("assets/models/dragon.obj", GPUMaterial{{1.f, 1.f, 1.f}, 1.f, {0.f, 0.f, 0.f, 0.f}}, Transform{{5.5f, 2.f, 0.f}, {}, glm::vec3(4)}, scene->materials));
-    scene->meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}}}, *scene));
+    GPUMaterial dragonMaterial{
+        {1.f, 1.f, 1.f},      // color
+        0.f,                  // smoothness
+        {0.f, 0.f, 0.f, 0.f}, // emission color + strength
+        .9f,                  // transparency
+        1.5f                  // ior
+    };
+
+    Transform dragonTransform{
+        {5.5f, 1.5f, 0.f}, // position
+        {},                // rotation
+        glm::vec3(4)       // scale
+    };
+
+    scene->meshes.push_back(loadMesh("assets/models/dragon.obj", dragonMaterial, dragonTransform, scene->materials));
+    scene->meshes.push_back(loadRect({{{0, 0, -12.5f}, {0, 0, 0}, {40, .5f, 40}}, {{1, 1, 1}, 0.f, {0, 0, 0, 0}, 0, 0, 0, 0}}, *scene));
+
+    // scene->meshes.push_back(loadRect({{{5.f, 4.f, -1.f}, {0, 0, 0}, {2, .25f, 2}}, {{0, 0, 0}, 0, {1, 1, 1, 1}, 0, 0, 0, 0}}, *scene));
 
     { // creates a circle of spheres in a color wheel
         float sides = 6;
@@ -39,7 +55,16 @@ int main()
             float b = 0.5f + 0.5f * sinf(angle + 4.0f * M_PIf / 3.0f);
 
             // x (up), y, z (right)
-            scene->spheres.push_back({{radius * sin(angle) + origin[0], 1.5, radius * cos(angle) + origin[1]}, 1.0f, {0.f, 0.f, 0.f}, 0.f, {r, g, b, 1.f}});
+            scene->spheres.push_back(
+                {{radius * sin(angle) + origin[0], 1.5, radius * cos(angle) + origin[1]},
+                 1.0f,           // radius
+                 {0, 0, 0},      // color
+                 0.f,            // smoothness
+                 {r, g, b, 1.f}, // emission
+                 0,              // transparency
+                 0,              // ior
+                 0,              // pad
+                 0});            // pad
         }
     }
 

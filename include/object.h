@@ -22,6 +22,10 @@ struct GPUMaterial
     glm::vec3 color;
     float smoothness;
     glm::vec4 emission;
+    float transparency;
+    float ior;
+    float pad0 = 0;
+    float pad1 = 0;
 };
 
 struct GPUTriangle
@@ -47,10 +51,13 @@ struct GPUSphere
     glm::vec3 position;
     float radius;
 
-    // explicit GPUMaterial declaration or else it breaks
     glm::vec3 color;
     float smoothness;
     glm::vec4 emission;
+    float transparency;
+    float ior;
+    float pad0;
+    float pad1;
 };
 
 struct Rectangle
