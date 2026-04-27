@@ -20,7 +20,6 @@
 
 #include "viewport.h"
 #include "bvh.h"
-#include "gui.h"
 #include "shader_sources.h"
 #include "log.h"
 
@@ -146,7 +145,7 @@ void Viewport::processGui()
 
 void Viewport::rebuildScene(RebuildFlags flags)
 {
-    Log::info("rebuilt scene");
+    Log::info("Rebuilt scene.");
 
     accumFrameIndex_ = 0;
 
@@ -157,37 +156,48 @@ void Viewport::rebuildScene(RebuildFlags flags)
 
     if (hasFlag(flags, RebuildFlags::Spheres))
     {
+        std::vector<Sphere *> spheres = pScene->getObjectsOfType<Sphere>();
+        std::vector<GPUSphere> gpuSpheres;
+        for (Sphere *s : spheres)
+            gpuSpheres.push_back(convertToGPUObject(*s));
+
         if (sphereSSBO_)
             glDeleteBuffers(1, &sphereSSBO_);
         glGenBuffers(1, &sphereSSBO_);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO_);
         glBufferData(
             GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(pScene->spheres.size() * sizeof(GPUSphere)),
-            pScene->spheres.data(),
+            static_cast<long int>(gpuSpheres.size() * sizeof(GPUSphere)),
+            gpuSpheres.data(),
             GL_STATIC_DRAW);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
     }
 
-    if (hasFlag(flags, RebuildFlags::Spheres))
+    if (hasFlag(flags, RebuildFlags::Materials))
     {
+        // std::vector<Object::Material *> &materials = pScene->materials_;
+        std::vector<GPUMaterial> gpuMaterials;
+        gpuMaterials.reserve(pScene->materials_.size());
+        for (Object::Material *m : pScene->materials_)
+            gpuMaterials.push_back({m->color, m->smoothness, m->emission, m->transparency, m->ior, 0, 0});
+
         if (matSSBO_)
             glDeleteBuffers(1, &matSSBO_);
         glGenBuffers(1, &matSSBO_);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO_);
         glBufferData(
             GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(pScene->materials.size() * sizeof(GPUMaterial)),
-            pScene->materials.data(),
+            static_cast<long int>(gpuMaterials.size() * sizeof(GPUMaterial)),
+            gpuMaterials.data(),
             GL_STATIC_DRAW);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
     }
 
     if (hasFlag(flags, RebuildFlags::Geometry))
     {
-        std::vector<GPUTriangle> triangles;
-        std::vector<GPUMesh> gpuMeshes;
-        convertToGPUMeshes(*pScene, triangles, gpuMeshes);
+        std::vector<Mesh *> meshes = pScene->getObjectsOfType<Mesh>();
+        auto [gpuMeshes, triangles] = convertToGPUObject(meshes);
+
         BVH bvh(triangles);
         if (triSSBO_)
             glDeleteBuffers(1, &triSSBO_);
@@ -233,6 +243,8 @@ void Viewport::rebuildScene(RebuildFlags flags)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, dataSSBO_);
     }
 
+    if (accumTexture_)
+        glDeleteTextures(1, &accumTexture_);
     glGenTextures(1, &accumTexture_);
     glBindTexture(GL_TEXTURE_2D, accumTexture_);
     glTexImage2D(
@@ -373,7 +385,7 @@ void Viewport::processKeyInput()
 
     camera_->handleKeyInput(rawWindow_, deltaTime_);
 
-    isMoving_ = camera_->cameraPos_ != oldPos && !isMoving_;
+    isMoving_ = camera_->cameraPos_ != oldPos;
 }
 
 void Viewport::framebufferSizeCallback(GLFWwindow *window, int width, int height)

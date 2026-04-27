@@ -31,6 +31,7 @@ find_package(glad CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(Stb REQUIRED)
 find_package(tinyobjloader CONFIG REQUIRED)
+find_package(RapidJSON CONFIG REQUIRED)
 
 file(GLOB_RECURSE SRC_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -69,7 +70,8 @@ target_link_libraries(engine PRIVATE
     glad::glad
     imgui::imgui
     tinyobjloader::tinyobjloader
-
+    RapidJSON
+    rapidjson
 )
 
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

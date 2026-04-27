@@ -6,17 +6,138 @@
 #include <string>
 #include <iostream>
 #include <stdint.h>
+#include <limits>
 
 #include "tiny_obj_loader.h"
 
-// -- Structs --
-
-struct Transform
+class Object
 {
-    glm::vec3 position = glm::vec3(0);
-    glm::vec3 rotation = glm::vec3(0);
-    glm::vec3 scale = glm::vec3(1);
+public:
+    struct Transform
+    {
+        glm::vec3 position = glm::vec3(0);
+        glm::vec3 rotation = glm::vec3(0);
+        glm::vec3 scale = glm::vec3(1);
+    } transform_;
+
+    struct Material
+    {
+        glm::vec3 color;
+        float smoothness;
+        glm::vec4 emission;
+        float transparency;
+        float ior;
+    } material_;
+
+    Object() = default;
+    Object(Transform transform, Material material) : transform_(transform), material_(material) {}
+    virtual ~Object() = default; // makes dynamic casting work, just trust me bro
+
+    uint32_t materialIdx_ = 0;
 };
+
+class Sphere : public Object
+{
+public:
+    Sphere() = default;
+    Sphere(glm::vec3 position, float radius, Material material) : Object({position, {0, 0, 0}, glm::vec3(radius)}, material), radius_(radius) {}
+
+    float radius_;
+};
+
+class Mesh : public Object
+{
+public:
+    Mesh() = default;
+    Mesh(Transform transform, Material material, std::vector<tinyobj::index_t> indices, std::vector<glm::vec3> vertices) : Object(transform, material), indices_(indices), vertices_(vertices) {}
+    Mesh(const std::string &path, Transform transform, Material material) : Object(transform, material)
+    {
+        loadMeshFromPath(path);
+    }
+
+    std::vector<tinyobj::index_t> indices_;
+    std::vector<glm::vec3> vertices_;
+    glm::vec3 minBounds_ = glm::vec3(std::numeric_limits<float>::max());
+    glm::vec3 maxBounds_ = glm::vec3(std::numeric_limits<float>::lowest());
+
+private:
+    void loadMeshFromPath(const std::string &path);
+};
+
+class Rectangle : public Mesh
+{
+public:
+    Rectangle() = default;
+    Rectangle(glm::vec3 position, glm::vec3 rotation, float width, float height, float length, Material material) : Mesh({position, rotation, glm::vec3(width, height, length)}, material, {}, {})
+    {
+        // cube generation
+
+        vertices_ = {
+            {-0.5f, -0.5f, -0.5f},
+            {0.5f, -0.5f, -0.5f},
+            {0.5f, 0.5f, -0.5f},
+            {-0.5f, 0.5f, -0.5f},
+            {-0.5f, -0.5f, 0.5f},
+            {0.5f, -0.5f, 0.5f},
+            {0.5f, 0.5f, 0.5f},
+            {-0.5f, 0.5f, 0.5f},
+        };
+
+        // 12 triangles, wound CCW when viewed from outside
+        static const int faceIndices[36] = {
+            0,
+            2,
+            1,
+            0,
+            3,
+            2, // -Z
+            4,
+            5,
+            6,
+            4,
+            6,
+            7, // +Z
+            0,
+            1,
+            5,
+            0,
+            5,
+            4, // -Y
+            3,
+            6,
+            2,
+            3,
+            7,
+            6, // +Y
+            0,
+            4,
+            7,
+            0,
+            7,
+            3, // -X
+            1,
+            2,
+            6,
+            1,
+            6,
+            5, // +X
+        };
+
+        indices_.clear();
+        for (int vi : faceIndices)
+        {
+            tinyobj::index_t idx{};
+            idx.vertex_index = vi;
+            idx.normal_index = -1;
+            idx.texcoord_index = -1;
+            indices_.push_back(idx);
+        }
+
+        minBounds_ = glm::vec3(-0.5f);
+        maxBounds_ = glm::vec3(0.5f);
+    }
+};
+
 struct GPUMaterial
 {
     glm::vec3 color;
@@ -40,12 +161,6 @@ struct GPUTriangle
     uint32_t pad1;
 };
 
-struct GPUMesh
-{
-    glm::uvec4 data; // firstTriangle, triangleCount, materialIdx, pad
-    glm::vec4 minBounds;
-    glm::vec4 maxBounds;
-};
 struct GPUSphere
 {
     glm::vec3 position;
@@ -60,28 +175,21 @@ struct GPUSphere
     float pad1;
 };
 
-struct Rectangle
+struct GPUMesh
 {
-    Transform transform;
-    GPUMaterial material;
+    glm::uvec4 data; // firstTriangle, triangleCount, materialIdx, pad
+    glm::vec4 minBounds;
+    glm::vec4 maxBounds;
 };
 
-struct Mesh
-{
-    std::vector<tinyobj::index_t> indices;
-    std::vector<glm::vec3> vertices;
-    Transform transform;
-    uint32_t materialIdx;
-    glm::vec3 minBounds;
-    glm::vec3 maxBounds;
-};
+GPUSphere convertToGPUObject(const Sphere &sphere);
+std::vector<GPUSphere> convertToGPUObject(const std::vector<Sphere *> &spheres);
 
-struct Scene
-{
-    std::vector<Mesh> meshes;
-    std::vector<GPUMaterial> materials;
-    std::vector<GPUSphere> spheres;
-};
+std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Mesh &mesh);
+std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Mesh *> &meshes);
+
+std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Rectangle &rectangle);
+std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Rectangle *> &rectangles);
 
 inline glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
 {
@@ -104,7 +212,7 @@ inline glm::vec3 nrm(const tinyobj::index_t &idx, const tinyobj::attrib_t &attri
         attrib.normals[normal_index + 2]);
 }
 
-inline glm::mat4 getMatrix(const Transform &t)
+inline glm::mat4 getMatrix(const Object::Transform &t)
 {
     glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
 
@@ -118,9 +226,3 @@ inline glm::mat4 getMatrix(const Transform &t)
 
     return T * R * S;
 }
-
-Mesh loadMesh(const std::string &path, const GPUMaterial &mat, const Transform &transform, std::vector<GPUMaterial> &materialPool);
-
-void convertToGPUMeshes(const Scene &scene, std::vector<GPUTriangle> &outTriangles, std::vector<GPUMesh> &outMeshes);
-
-Mesh loadRect(struct Rectangle rect, Scene &scene);

@@ -10,8 +10,9 @@
         "opengl3-binding"
       ]
     },
-    "tinyobjloader",
+    "portable-file-dialogs",
     "stb",
-    "portable-file-dialogs"
+    "tinyobjloader",
+    "rapidjson"
   ]
 }

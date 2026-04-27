@@ -8,6 +8,7 @@
 #include "object.h"
 #include "shader.h"
 #include "gui.h"
+#include "scene.h"
 
 class Viewport
 {

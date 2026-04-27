@@ -19,7 +19,8 @@ struct Material {
     vec4 emission; //rgb + strength
     float transparency;
     float ior;
-    float pad;
+    float pad0;
+    float pad1;
 };
 
 struct Ray {
