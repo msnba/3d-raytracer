@@ -78,12 +78,14 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     assets/raytracer.comp
     assets/pass.vert
     assets/pass.frag
+    assets/defaults.cfg
 )
 
 file(READ "assets/raytracer.comp" RAYTRACER_COMP)
 file(READ "assets/pass.vert" PASS_VERT)
 file(READ "assets/pass.frag" PASS_FRAG)
-configure_file(assets/shader_sources.h.in include/shader_sources.h)
+file(READ "assets/defaults.cfg" DEFAULT_SETTINGS)
+configure_file(assets/raw_sources.h.in include/raw_sources.h)
 
 add_custom_command(
     TARGET engine POST_BUILD

@@ -9,9 +9,10 @@
 #include "window.h"
 #include "gui.h"
 #include "log.h"
-#include "inter_font.h"
+#include "settings.h"
+#include "file_picker.h"
 
-GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWindow)
+GUI::GUI(GLFWwindow *rawWindow) : rawWindow_(rawWindow)
 {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -26,26 +27,17 @@ GUI::GUI(GLFWwindow *rawWindow, const std::string &filepath) : rawWindow_(rawWin
 
     int w, h;
     glfwGetFramebufferSize(rawWindow_, &w, &h);
-    guiScale_ = static_cast<float>(h) / 1080.0f;
+    guiScale_ = static_cast<float>(h) / 1080.0f * Settings::get().getValue("guiScale", 1.0f);
 
-    currentFont_ = io.Fonts->AddFontFromMemoryCompressedTTF(
-        Inter_compressed_data,
-        Inter_compressed_size,
-        14.0f * guiScale_);
+    ImFontConfig cfg;
+    cfg.SizePixels = 13.0f * guiScale_; // default imgui font size
+    io.Fonts->AddFontDefault(&cfg);
+    currentFont_ = nullptr;
 
     ImGui::GetStyle().ScaleAllSizes(guiScale_);
     io.FontGlobalScale = 1.0f;
 
-    if (!currentFont_)
-    {
-        io.Fonts->AddFontDefault();
-        currentFont_ = nullptr;
-    }
-
     ImGui::StyleColorsDark();
-
-    if (!loadSettings(filepath))
-        throw std::runtime_error("Settings at file \"" + filepath + "\" cannot be loaded.");
 }
 
 GUI::~GUI()
@@ -53,7 +45,7 @@ GUI::~GUI()
     destroySelf();
 }
 
-GUI::GUI(GUI &&other) : settingsMap_(std::move(other.settingsMap_)), rawWindow_(other.rawWindow_), guiScale_(other.guiScale_)
+GUI::GUI(GUI &&other) : rawWindow_(other.rawWindow_), guiScale_(other.guiScale_)
 {
     other.rawWindow_ = nullptr;
 }
@@ -64,7 +56,6 @@ GUI &GUI::operator=(GUI &&other)
     {
         destroySelf();
 
-        settingsMap_ = std::move(other.settingsMap_);
         rawWindow_ = other.rawWindow_;
         guiScale_ = other.guiScale_;
         other.rawWindow_ = nullptr;
@@ -78,12 +69,14 @@ void GUI::render(const ViewportData &data)
     if (!renderGui_)
         return;
 
-    static bool showDebug = true;
-    static bool showSettings = true;
-    static bool showLog = true;
-    static bool isAccumulationEnabled = true;
-    static bool isSSAAEnabled = false;
-    static bool isVSyncEnabled = true;
+    Settings &s = Settings::get();
+
+    bool showDebug = s.getValue("showDebug", true);
+    bool showSettings = s.getValue("showSettings", true);
+    bool showLog = s.getValue("showLog", true);
+    bool isAccumulationEnabled = s.getValue("accumulationDefaultEnabled", true);
+    bool isSSAAEnabled = s.getValue("SSAADefaultEnabled", false);
+    bool isVSyncEnabled = s.getValue("VSyncDefaultEnabled", true);
     static int maxBounce = 5;
     static int raysPerPixel = 1;
 
@@ -94,6 +87,7 @@ void GUI::render(const ViewportData &data)
     ImGui::PushStyleColor(ImGuiCol_Border, {});
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0);
     ImGui::PushFont(currentFont_);
+
     if (ImGui::BeginMainMenuBar() && showTopBar_)
     {
         if (ImGui::BeginMenu("File"))
@@ -104,6 +98,24 @@ void GUI::render(const ViewportData &data)
             if (ImGui::MenuItem("Screenshot", "F12") && callbacks_.onScreenshot)
                 callbacks_.onScreenshot();
 
+            if (ImGui::MenuItem("Load Settings"))
+            {
+                FilePicker::get().query({"cfg", "", "Load Settings"}, false, [this](const std::string &destination)
+                                        {
+                    Settings::get().loadFromFile(destination, true); 
+                    if(callbacks_.onSettingsLoaded)
+                        callbacks_.onSettingsLoaded(); });
+            }
+
+            if (ImGui::MenuItem("Save Settings"))
+                Settings::get().saveToFile();
+
+            if (ImGui::MenuItem("Save Settings to File"))
+            {
+                FilePicker::get().query({"cfg", "", "Save Settings"}, true, [this](const std::string &destination)
+                                        { Settings::get().saveToFile(destination); });
+            }
+
             // if (ImGui::MenuItem("Toggle Fullscreen", "F11") && callbacks_.onToggleFullscreen)
             //     callbacks_.onToggleFullscreen();
 
@@ -111,9 +123,12 @@ void GUI::render(const ViewportData &data)
         }
         if (ImGui::BeginMenu("View"))
         {
-            ImGui::MenuItem("Show Debug Panel", nullptr, &showDebug);
-            ImGui::MenuItem("Show Settings Panel", nullptr, &showSettings);
-            ImGui::MenuItem("Show Log Panel", nullptr, &showLog);
+            if (ImGui::MenuItem("Show Debug Panel", nullptr, &showDebug))
+                s.setValue("showDebug", showDebug);
+            if (ImGui::MenuItem("Show Settings Panel", nullptr, &showSettings))
+                s.setValue("showSettings", showSettings);
+            if (ImGui::MenuItem("Show Log Panel", nullptr, &showLog))
+                s.setValue("showLog", showLog);
             ImGui::EndMenu();
         }
 
@@ -162,13 +177,22 @@ void GUI::render(const ViewportData &data)
         ImGui::SeparatorText("Render Settings");
 
         if (ImGui::Checkbox("Frame Accumulation Enabled", &isAccumulationEnabled) && callbacks_.onAccumulationChanged)
+        {
+            s.setValue("accumulationDefaultEnabled", isAccumulationEnabled);
             callbacks_.onAccumulationChanged(isAccumulationEnabled);
+        }
 
         if (ImGui::Checkbox("SSAA Enabled", &isSSAAEnabled) && callbacks_.onSSAAChanged)
+        {
+            s.setValue("SSAADefaultEnabled", isSSAAEnabled);
             callbacks_.onSSAAChanged(isSSAAEnabled);
+        }
 
         if (ImGui::Checkbox("VSync Enabled", &isVSyncEnabled))
+        {
+            s.setValue("VSyncDefaultEnabled", isVSyncEnabled);
             glfwSwapInterval(isVSyncEnabled ? 1 : 0);
+        }
 
         if (callbacks_.onMaxBounceChanged)
         {
@@ -244,57 +268,11 @@ void GUI::setCallbacks(const ViewportCallbacks &callbacks)
     callbacks_ = callbacks;
 }
 
-bool GUI::loadSettings(const std::string &filepath)
-{
-    std::ifstream file(filepath);
-    if (!file.is_open())
-        return false;
-
-    std::string line;
-    while (getline(file, line))
-    {
-        if (line.empty() || line[0] == '#')
-            continue;
-
-        std::istringstream ss(line);
-        std::string key, value;
-        if (!std::getline(ss, key, '=') || !std::getline(ss, value))
-            continue;
-
-        settingsMap_[key] = parseValue(value);
-    }
-
-    return true;
-}
-
-bool GUI::saveSettings(const std::string &filepath)
-{
-    (void)filepath;
-    return false;
-}
-
-SettingValue GUI::parseValue(const std::string &value)
-{
-    if (value == "true" || value == "false")
-        return value == "true";
-
-    // type checking without having to use try/catch
-    int i;
-    auto [ptr_i, ec_i] = std::from_chars(value.data(), value.data() + value.size(), i);
-    if (ec_i == std::errc{} && ptr_i == value.data() + value.size())
-        return i;
-
-    float f;
-    auto [ptr_f, ec_f] = std::from_chars(value.data(), value.data() + value.size(), f);
-    if (ec_f == std::errc{} && ptr_f == value.data() + value.size())
-        return f;
-
-    return value;
-}
-
 void GUI::destroySelf()
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    Settings::get().saveToFile();
 }

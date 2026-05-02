@@ -15,7 +15,7 @@
 using SettingValue = std::variant<int, float, bool, std::string>;
 
 // i know this isn't the best way to pass data
-//  TODO: refactor vieport data
+//  TODO: refactor viewport data
 struct ViewportData
 {
     uint32_t accumFrameIndex = 0;
@@ -32,13 +32,14 @@ struct ViewportCallbacks
     std::function<void()> onScreenshot = nullptr;
     std::function<void()> onToggleFullscreen = nullptr;
     std::function<void(bool)> onAccumulationChanged = nullptr;
+    std::function<void()> onSettingsLoaded = nullptr;
 };
 
 class GUI
 {
 public:
     GUI() = default;
-    GUI(GLFWwindow *rawWindow, const std::string &filepath);
+    GUI(GLFWwindow *rawWindow);
 
     ~GUI();
     GUI(const GUI &) = delete;
@@ -50,33 +51,10 @@ public:
     bool toggleRender();
 
     void setCallbacks(const ViewportCallbacks &callbacks);
-    bool loadSettings(const std::string &filepath);
-    bool saveSettings(const std::string &filepath);
-
-    template <typename T_>
-    void set(const std::string &key, T_ value)
-    {
-        settingsMap_[key] = SettingValue(value);
-    }
-
-    template <typename T_>
-    T_ get(const std::string &key, T_ fallback) const
-    {
-        auto it = settingsMap_.find(key);
-        if (it == settingsMap_.end())
-            return fallback;
-
-        if (auto *val = std::get_if<T_>(&it->second))
-            return *val;
-
-        throw std::runtime_error("Key \"" + key + "\" exists, but wrong type \"" + typeid(T_).name() + "\" requested.");
-    }
 
 private:
-    static SettingValue parseValue(const std::string &value);
     void destroySelf();
 
-    std::unordered_map<std::string, SettingValue> settingsMap_;
     GLFWwindow *rawWindow_ = nullptr;
     ViewportCallbacks callbacks_{};
     ImFont *currentFont_ = nullptr;

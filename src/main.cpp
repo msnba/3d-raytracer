@@ -8,6 +8,8 @@
 #include "object.h"
 #include "gui.h"
 #include "scene.h"
+#include "settings.h"
+#include "raw_sources.h"
 
 #define SCR_WIDTH 1440
 #define SCR_HEIGHT 1080
@@ -19,9 +21,12 @@
 
 int main()
 {
+    if (!Settings::get().loadFromSource(DEFAULT_SETTINGS, false))
+        throw std::runtime_error("Default settings cannot be loaded.");
+
     std::unique_ptr<Window> window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "Window", false);
     std::unique_ptr<Camera> camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
-    std::unique_ptr<GUI> gui = std::make_unique<GUI>(window->window, "./assets/defaults.cfg");
+    std::unique_ptr<GUI> gui = std::make_unique<GUI>(window->window);
     std::shared_ptr scene = std::make_shared<Scene>();
 
     Object::Material dragonMaterial{

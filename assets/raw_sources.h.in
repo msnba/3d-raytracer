@@ -11,3 +11,7 @@ inline const char *PASS_VERT = R"GLSL(
 inline const char *PASS_FRAG = R"GLSL(
 @PASS_FRAG@
 )GLSL";
+
+inline const char *DEFAULT_SETTINGS = R"(
+@DEFAULT_SETTINGS@
+)";

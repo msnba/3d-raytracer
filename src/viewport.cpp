@@ -17,8 +17,10 @@
 
 #include "viewport.h"
 #include "bvh.h"
-#include "shader_sources.h"
+#include "raw_sources.h"
+#include "file_picker.h"
 #include "log.h"
+#include "settings.h"
 
 Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene), rawWindow_(window_->window), passthrough_(PASS_VERT, PASS_FRAG), raytrace_(RAYTRACER_COMP)
 {
@@ -87,7 +89,9 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
                         .onToggleFullscreen = [this]()
                         { fullscreenPressed_ = true; },
                         .onAccumulationChanged = [this](bool isAccumulationEnabled)
-                        { isAccumulationEnabled_ = isAccumulationEnabled; }
+                        { isAccumulationEnabled_ = isAccumulationEnabled; },
+                        .onSettingsLoaded = [this]()
+                        { isAccumulationEnabled_ = Settings::get().getValue("accumulationDefaultEnabled", true); }
 
     });
 
@@ -97,6 +101,8 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
     sceneUploader_.upload(*pScene, RebuildFlags::All);
     rebuildAccumTexture();
+
+    isAccumulationEnabled_ = Settings::get().getValue("accumulationDefaultEnabled", true);
 }
 
 Viewport::~Viewport()
@@ -221,23 +227,14 @@ void Viewport::saveScreenshot()
     auto pixels = std::make_shared<std::vector<uint8_t>>(static_cast<size_t>(w * h * 3));
     glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, pixels->data());
 
-    std::thread([this, pixels, w, h]()
-                {
-                    std::string destination = pfd::save_file("Save Screenshot", "screenshot.png",
-                                                             {"PNG Files", "*.png"})
-                                                  .result();
-                    if (!destination.empty())
-                    {
-                        if (destination.size() < 4 || destination.substr(destination.size() - 4) != ".png")
-                            destination += ".png";
-
-                        stbi_flip_vertically_on_write(1);
-                        stbi_write_png(destination.c_str(), w, h, 3, pixels->data(), w * 3);
-                        std::cout << "Screenshot saved in " << destination << "\n";
-                    }
-
-                    screenshotInProgress_ = false; })
-        .detach();
+    FilePicker::get().query({"png", "screenshot", "Save Screenshot"}, true, [this, pixels, w, h](const std::string &destination)
+                            {
+        if (!destination.empty())
+        {
+            stbi_flip_vertically_on_write(1);
+            stbi_write_png(destination.c_str(), w, h, 3, pixels->data(), w * 3);
+        }
+        screenshotInProgress_ = false; });
 }
 
 void Viewport::toggleFullscreen()
