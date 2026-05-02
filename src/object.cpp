@@ -1,6 +1,8 @@
 #include "object.h"
 #include "log.h"
 
+#include <iostream>
+
 void Mesh::loadMeshFromPath(const std::string &path)
 {
     tinyobj::attrib_t attrib;
@@ -133,16 +135,16 @@ std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(con
     return {outMeshes, outTriangles};
 }
 
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Rectangle &rectangle)
+std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Cube &cube)
 {
-    return convertToGPUObject(static_cast<const Mesh &>(rectangle));
+    return convertToGPUObject(static_cast<const Mesh &>(cube));
 }
 
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Rectangle *> &rectangles)
+std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Cube *> &cubes)
 {
     std::vector<Mesh *> meshes;
-    meshes.reserve(rectangles.size());
-    for (Rectangle *rectangle : rectangles)
-        meshes.push_back(static_cast<Mesh *>(rectangle));
+    meshes.reserve(cubes.size());
+    for (Cube *cube : cubes)
+        meshes.push_back(static_cast<Mesh *>(cube));
     return convertToGPUObject(meshes);
 }

@@ -8,35 +8,61 @@
 class Scene
 {
 public:
-    std::vector<std::unique_ptr<Object>> objects_;
-    std::vector<Object::Material *> materials_; // owned by objects_
+    struct SceneSettings
+    {
+        uint32_t maxBounce = 4;
+        uint32_t numRaysPerPixel = 1;
+        uint32_t isSSAAEnabled = 0;
+    };
 
     Scene() = default;
+    ~Scene() = default;
+
+    Scene(const Scene &) = delete;
+    Scene &operator=(const Scene &) = delete;
 
     template <typename T_>
-    bool add(std::unique_ptr<T_> object)
+    T_ *add(std::unique_ptr<T_> object)
     {
+        static_assert(std::is_base_of_v<Object, T_>, "Object must derive from Object");
+
         if (!object)
-            return false;
+            return nullptr;
 
         object->materialIdx_ = static_cast<uint32_t>(materials_.size());
         materials_.push_back(&object->material_);
+
+        T_ *raw = object.get();
         objects_.push_back(std::move(object));
 
-        return true;
+        return raw;
     }
 
+    // rebuildScene must be called after
+    bool remove(Object *target);
+
+    void syncMaterials();
+
     template <typename T_>
-    std::vector<T_ *> getObjectsOfType()
+    std::vector<T_ *> getObjectsOfType() const
     {
         std::vector<T_ *> output;
         for (const std::unique_ptr<Object> &obj : objects_)
-        {
-            T_ *casted = dynamic_cast<T_ *>(obj.get()); // returns nullptr if obj is not of type T_
-            if (casted)
+            if (T_ *casted = dynamic_cast<T_ *>(obj.get())) // i had no idea you can instantiate variables in if statements
                 output.push_back(casted);
-        }
 
         return output;
     }
+
+    void setSettings(SceneSettings settings) { settings_ = settings; }
+    const SceneSettings &settings() const { return settings_; }
+
+    size_t objectCount() const { return objects_.size(); }
+    size_t materialCount() const { return materials_.size(); }
+
+    std::vector<std::unique_ptr<Object>> objects_;
+    std::vector<Object::Material *> materials_; // owned by objects_
+
+private:
+    SceneSettings settings_;
 };

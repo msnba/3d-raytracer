@@ -11,12 +11,9 @@
 #include <stb_image_write.h>
 
 #include <iostream>
-#include <iomanip>
 #include <vector>
-#include <future>
 #include <stdexcept>
 #include <stdint.h>
-#include <functional>
 
 #include "viewport.h"
 #include "bvh.h"
@@ -49,20 +46,42 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
     glGenVertexArrays(1, &quadVAO_);
     glBindVertexArray(quadVAO_);
-
     glGenBuffers(1, &quadVBO_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVBO_);
-
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
     gui_->setCallbacks({.onMaxBounceChanged = [this](uint32_t maxBounce)
-                        { maxBounce_ = maxBounce; rebuildScene(RebuildFlags::SceneData); },
+                        {
+                            if(std::shared_ptr<Scene> pScene = scene_.lock()){
+                                auto s = pScene->settings();
+                                s.maxBounce = maxBounce;
+                                pScene->setSettings(s);
+
+                                sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
+                                accumFrameIndex_ = 0;
+                            }; },
                         .onRaysPerPixelChanged = [this](uint32_t numRaysPerPixel)
-                        { numRaysPerPixel_ = numRaysPerPixel; rebuildScene({RebuildFlags::SceneData}); },
+                        { 
+                            if(std::shared_ptr<Scene> pScene = scene_.lock()){
+                                auto s = pScene->settings();
+                                s.numRaysPerPixel = numRaysPerPixel;
+                                pScene->setSettings(s);
+
+                                sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
+                                accumFrameIndex_ = 0;
+                            }; },
                         .onSSAAChanged = [this](bool isSSAAEnabled)
-                        { isSSAAEnabled_ = isSSAAEnabled ? 1 : 0; rebuildScene(RebuildFlags::SceneData); },
+                        {  
+                            if(std::shared_ptr<Scene> pScene = scene_.lock()){
+                                auto s = pScene->settings();
+                                s.isSSAAEnabled = isSSAAEnabled ? 1u : 0u;
+                                pScene->setSettings(s);
+
+                                sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
+                                accumFrameIndex_ = 0;
+                            }; },
                         .onScreenshot = [this]()
                         { isScreenshot_ = true; },
                         .onToggleFullscreen = [this]()
@@ -72,15 +91,18 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
     });
 
-    rebuildScene(RebuildFlags::All);
+    std::shared_ptr<Scene> pScene = scene_.lock();
+    if (!pScene)
+        throw std::runtime_error("No scene during viewport construction.");
+
+    sceneUploader_.upload(*pScene, RebuildFlags::All);
+    rebuildAccumTexture();
 }
 
 Viewport::~Viewport()
 {
     glDeleteVertexArrays(1, &quadVAO_);
     glDeleteBuffers(1, &quadVBO_);
-    glDeleteBuffers(1, &sphereSSBO_);
-    glDeleteBuffers(1, &matSSBO_);
     glDeleteTextures(1, &accumTexture_);
 }
 
@@ -126,10 +148,12 @@ void Viewport::update()
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
     if (isAccumulationEnabled_ && !isPanning_ && !isMoving_)
         accumFrameIndex_++;
     else
         accumFrameIndex_ = 0;
+
     glfwSwapBuffers(rawWindow_);
     glfwPollEvents();
 }
@@ -143,132 +167,23 @@ void Viewport::processGui()
     gui_->render({.accumFrameIndex = accumFrameIndex_, .fpsString = getFPS(), .fov = camera_->fov_});
 }
 
-void Viewport::rebuildScene(RebuildFlags flags)
+void Viewport::rebuildAccumTexture()
 {
-    Log::info("Rebuilt scene.");
-
-    accumFrameIndex_ = 0;
-
-    std::shared_ptr<Scene> pScene = scene_.lock();
-
-    if (!pScene)
-        throw std::runtime_error("Locking scene failed during rebuild.");
-
-    if (hasFlag(flags, RebuildFlags::Spheres))
-    {
-        std::vector<Sphere *> spheres = pScene->getObjectsOfType<Sphere>();
-        std::vector<GPUSphere> gpuSpheres;
-        for (Sphere *s : spheres)
-            gpuSpheres.push_back(convertToGPUObject(*s));
-
-        if (sphereSSBO_)
-            glDeleteBuffers(1, &sphereSSBO_);
-        glGenBuffers(1, &sphereSSBO_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, sphereSSBO_);
-        glBufferData(
-            GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(gpuSpheres.size() * sizeof(GPUSphere)),
-            gpuSpheres.data(),
-            GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, sphereSSBO_);
-    }
-
-    if (hasFlag(flags, RebuildFlags::Materials))
-    {
-        // std::vector<Object::Material *> &materials = pScene->materials_;
-        std::vector<GPUMaterial> gpuMaterials;
-        gpuMaterials.reserve(pScene->materials_.size());
-        for (Object::Material *m : pScene->materials_)
-            gpuMaterials.push_back({m->color, m->smoothness, m->emission, m->transparency, m->ior, 0, 0});
-
-        if (matSSBO_)
-            glDeleteBuffers(1, &matSSBO_);
-        glGenBuffers(1, &matSSBO_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, matSSBO_);
-        glBufferData(
-            GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(gpuMaterials.size() * sizeof(GPUMaterial)),
-            gpuMaterials.data(),
-            GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, matSSBO_);
-    }
-
-    if (hasFlag(flags, RebuildFlags::Geometry))
-    {
-        std::vector<Mesh *> meshes = pScene->getObjectsOfType<Mesh>();
-        auto [gpuMeshes, triangles] = convertToGPUObject(meshes);
-
-        BVH bvh(triangles);
-        if (triSSBO_)
-            glDeleteBuffers(1, &triSSBO_);
-        glGenBuffers(1, &triSSBO_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, triSSBO_);
-        glBufferData(
-            GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(bvh.triangles_.size() * sizeof(GPUTriangle)),
-            bvh.triangles_.data(),
-            GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, triSSBO_);
-
-        if (bvhSSBO_)
-            glDeleteBuffers(1, &bvhSSBO_);
-        glGenBuffers(1, &bvhSSBO_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, bvhSSBO_);
-        glBufferData(
-            GL_SHADER_STORAGE_BUFFER,
-            static_cast<long int>(bvh.nodes_.size() * sizeof(BVH::GPUNode)),
-            bvh.nodes_.data(),
-            GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, bvhSSBO_);
-    }
-
-    if (hasFlag(flags, RebuildFlags::SceneData))
-    {
-        struct GPUSceneData
-        {
-            uint32_t maxBounce;
-            uint32_t numRaysPerPixel;
-            uint32_t SSAA;
-        } sceneData{maxBounce_, numRaysPerPixel_, isSSAAEnabled_};
-
-        if (dataSSBO_)
-            glDeleteBuffers(1, &dataSSBO_);
-        glGenBuffers(1, &dataSSBO_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, dataSSBO_);
-        glBufferData(
-            GL_SHADER_STORAGE_BUFFER,
-            sizeof(GPUSceneData),
-            &sceneData,
-            GL_STATIC_DRAW);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, dataSSBO_);
-    }
-
     if (accumTexture_)
         glDeleteTextures(1, &accumTexture_);
+
     glGenTextures(1, &accumTexture_);
     glBindTexture(GL_TEXTURE_2D, accumTexture_);
     glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA32F,
+        GL_TEXTURE_2D, 0, GL_RGBA32F,
         static_cast<GLsizei>(window_->SCR_WIDTH),
         static_cast<GLsizei>(window_->SCR_HEIGHT),
-        0,
-        GL_RGBA,
-        GL_FLOAT,
-        nullptr);
+        0, GL_RGBA, GL_FLOAT, nullptr);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glBindImageTexture(
-        0,
-        accumTexture_,
-        0,
-        GL_FALSE,
-        0,
-        GL_READ_WRITE,
-        GL_RGBA32F);
+    glBindImageTexture(0, accumTexture_, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 }
 
 bool Viewport::shouldClose() const
@@ -391,50 +306,30 @@ void Viewport::processKeyInput()
 void Viewport::framebufferSizeCallback(GLFWwindow *window, int width, int height)
 {
     Viewport *instance = static_cast<Viewport *>(glfwGetWindowUserPointer(window));
-    if (instance)
-    {
-        instance->accumFrameIndex_ = 0;
+    if (!instance)
+        return;
 
-        instance->window_->SCR_WIDTH = static_cast<unsigned int>(width);
-        instance->window_->SCR_HEIGHT = static_cast<unsigned int>(height);
-        glViewport(0, 0, width, height);
+    instance->accumFrameIndex_ = 0;
+    instance->window_->SCR_WIDTH = static_cast<unsigned int>(width);
+    instance->window_->SCR_HEIGHT = static_cast<unsigned int>(height);
 
-        glBindTexture(GL_TEXTURE_2D, instance->accumTexture_);
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA32F,
-            width,
-            height,
-            0,
-            GL_RGBA,
-            GL_FLOAT,
-            nullptr);
-
-        glBindImageTexture(
-            0,
-            instance->accumTexture_,
-            0,
-            GL_FALSE,
-            0,
-            GL_READ_WRITE,
-            GL_RGBA32F);
-    }
+    glViewport(0, 0, width, height);
+    instance->rebuildAccumTexture();
 }
 
 void Viewport::cursorPosCallback(GLFWwindow *window, double xposd, double yposd)
 {
     Viewport *instance = static_cast<Viewport *>(glfwGetWindowUserPointer(window));
 
-    if (instance)
-    {
-        instance->camera_->handleMouseInput(
-            instance->accumFrameIndex_,
-            static_cast<float>(xposd),
-            static_cast<float>(yposd),
-            instance->mouseLastX_,
-            instance->mouseLastY_);
-    }
+    if (!instance)
+        return;
+
+    instance->camera_->handleMouseInput(
+        instance->accumFrameIndex_,
+        static_cast<float>(xposd),
+        static_cast<float>(yposd),
+        instance->mouseLastX_,
+        instance->mouseLastY_);
 }
 
 void Viewport::scrollCallback(GLFWwindow *window, double xoffset, double yoffset)

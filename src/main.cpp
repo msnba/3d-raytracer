@@ -39,7 +39,7 @@ int main()
     };
 
     scene->add(std::make_unique<Mesh>(Mesh("assets/models/dragon.obj", dragonTransform, dragonMaterial)));
-    scene->add(std::make_unique<Rectangle>(Rectangle({0, 0, -12.5f}, {0, 0, 0}, 40.f, .5f, 40.f, {{1, 1, 1}, 0.f, {0, 0, 0, 0}, 0, 0})));
+    scene->add(std::make_unique<Cube>(Cube({0, 0, -12.5f}, {0, 0, 0}, 40.f, .5f, 40.f, {{1, 1, 1}, 0.f, {0, 0, 0, 0}, 0, 0})));
 
     // scene->meshes.push_back(loadRect({{{5.f, 4.f, -1.f}, {0, 0, 0}, {2, .25f, 2}}, {{0, 0, 0}, 0, {1, 1, 1, 1}, 0, 0, 0, 0}}, *scene));
 

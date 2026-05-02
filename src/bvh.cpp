@@ -14,8 +14,6 @@ BVH::BVH(std::vector<GPUTriangle> &triangles_) : triangles_(triangles_)
     nodes_.push_back(node);
 
     split(0);
-
-    std::cout << "bvh built with: " << nodes_.size() << " nodes_\n";
 }
 
 void BVH::growNodeToInclude(GPUNode &node, const glm::vec3 &point)

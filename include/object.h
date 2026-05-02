@@ -4,7 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <string>
-#include <iostream>
 #include <stdint.h>
 #include <limits>
 
@@ -60,15 +59,15 @@ public:
     glm::vec3 minBounds_ = glm::vec3(std::numeric_limits<float>::max());
     glm::vec3 maxBounds_ = glm::vec3(std::numeric_limits<float>::lowest());
 
-private:
+protected:
     void loadMeshFromPath(const std::string &path);
 };
 
-class Rectangle : public Mesh
+class Cube : public Mesh
 {
 public:
-    Rectangle() = default;
-    Rectangle(glm::vec3 position, glm::vec3 rotation, float width, float height, float length, Material material) : Mesh({position, rotation, glm::vec3(width, height, length)}, material, {}, {})
+    Cube() = default;
+    Cube(glm::vec3 position, glm::vec3 rotation, float width, float height, float length, Material material) : Mesh({position, rotation, glm::vec3(width, height, length)}, material, {}, {})
     {
         // cube generation
 
@@ -188,8 +187,8 @@ std::vector<GPUSphere> convertToGPUObject(const std::vector<Sphere *> &spheres);
 std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Mesh &mesh);
 std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Mesh *> &meshes);
 
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Rectangle &rectangle);
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Rectangle *> &rectangles);
+std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Cube &cube);
+std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Cube *> &cubes);
 
 inline glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
 {
