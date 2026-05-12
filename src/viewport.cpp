@@ -19,8 +19,8 @@
 #include "bvh.h"
 #include "raw_sources.h"
 #include "file_picker.h"
-#include "log.h"
 #include "settings.h"
+#include "log.h"
 
 Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camera, std::unique_ptr<GUI> gui, std::weak_ptr<Scene> scene) : window_(std::move(window)), camera_(std::move(camera)), gui_(std::move(gui)), scene_(scene), rawWindow_(window_->window), passthrough_(PASS_VERT, PASS_FRAG), raytrace_(RAYTRACER_COMP)
 {
@@ -54,8 +54,10 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    gui_->setCallbacks({.onMaxBounceChanged = [this](uint32_t maxBounce)
-                        {
+    ViewportCallbacks callbacks{};
+
+    callbacks.set("maxBounceChanged", [this](uint32_t maxBounce)
+                  {
                             if(std::shared_ptr<Scene> pScene = scene_.lock()){
                                 auto s = pScene->settings();
                                 s.maxBounce = maxBounce;
@@ -63,9 +65,9 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
-                            }; },
-                        .onRaysPerPixelChanged = [this](uint32_t numRaysPerPixel)
-                        { 
+                            }; });
+    callbacks.set("raysPerPixelChanged", [this](uint32_t numRaysPerPixel)
+                  { 
                             if(std::shared_ptr<Scene> pScene = scene_.lock()){
                                 auto s = pScene->settings();
                                 s.numRaysPerPixel = numRaysPerPixel;
@@ -73,9 +75,9 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
-                            }; },
-                        .onSSAAChanged = [this](bool isSSAAEnabled)
-                        {  
+                            }; });
+    callbacks.set("SSAAChanged", [this](bool isSSAAEnabled)
+                  {  
                             if(std::shared_ptr<Scene> pScene = scene_.lock()){
                                 auto s = pScene->settings();
                                 s.isSSAAEnabled = isSSAAEnabled ? 1u : 0u;
@@ -83,17 +85,30 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
-                            }; },
-                        .onScreenshot = [this]()
-                        { isScreenshot_ = true; },
-                        .onToggleFullscreen = [this]()
-                        { fullscreenPressed_ = true; },
-                        .onAccumulationChanged = [this](bool isAccumulationEnabled)
-                        { isAccumulationEnabled_ = isAccumulationEnabled; },
-                        .onSettingsLoaded = [this]()
-                        { isAccumulationEnabled_ = Settings::get().getValue("accumulationDefaultEnabled", true); }
+                            }; });
+    callbacks.set("screenshot", [this]()
+                  { isScreenshot_ = true; });
+    callbacks.set("toggleFullscreen", [this]()
+                  { fullscreenPressed_ = true; });
+    callbacks.set("accumulationChanged", [this](bool isAccumulationEnabled)
+                  { isAccumulationEnabled_ = isAccumulationEnabled; });
+    callbacks.set("settingsLoaded", [this]()
+                  { isAccumulationEnabled_ = Settings::get().getValue("accumulationDefaultEnabled", true); });
+    callbacks.set("sceneLoaded", [this](std::string destination)
+                  {
+                      if (auto scene = scene_.lock())
+                          if(scene->loadFromFile(destination, true))
+                            pendingRebuild_ = pendingRebuild_ | RebuildFlags::All; });
 
-    });
+    callbacks.set("sceneSaved", [this](std::optional<std::string> destination)
+                  {
+        if(auto scene = scene_.lock()){
+            if(destination)
+                scene->saveToFile(*destination);
+            else
+                scene->saveToFile(); } });
+
+    gui_->setCallbacks(callbacks);
 
     std::shared_ptr<Scene> pScene = scene_.lock();
     if (!pScene)
@@ -117,6 +132,14 @@ void Viewport::update()
     float currentFrame = (float)glfwGetTime();
     deltaTime_ = currentFrame - lastFrame_;
     lastFrame_ = currentFrame;
+
+    if (pendingRebuild_ != RebuildFlags::None)
+    {
+        if (auto scene = scene_.lock())
+            sceneUploader_.upload(*scene, pendingRebuild_);
+        pendingRebuild_ = RebuildFlags::None;
+        accumFrameIndex_ = 0;
+    }
 
     processKeyInput();
     processGui();

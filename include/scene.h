@@ -21,6 +21,12 @@ public:
     Scene(const Scene &) = delete;
     Scene &operator=(const Scene &) = delete;
 
+    bool loadFromFile(std::string &filePath, bool saveLast);
+    bool loadFromSource(const char *source, bool saveLast);
+
+    bool saveToFile(const std::string &filepath) const;
+    bool saveToFile() const;
+
     template <typename T_>
     T_ *add(std::unique_ptr<T_> object)
     {
@@ -38,7 +44,6 @@ public:
         return raw;
     }
 
-    // rebuildScene must be called after
     bool remove(Object *target);
 
     void syncMaterials();
@@ -65,4 +70,5 @@ public:
 
 private:
     SceneSettings settings_;
+    std::string currentFile_ = "";
 };

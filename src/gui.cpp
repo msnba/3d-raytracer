@@ -95,22 +95,41 @@ void GUI::render(const ViewportData &data)
             if (ImGui::MenuItem("Quit", "Ctrl+Q"))
                 glfwSetWindowShouldClose(rawWindow_, true);
 
-            if (ImGui::MenuItem("Screenshot", "F12") && callbacks_.onScreenshot)
-                callbacks_.onScreenshot();
+            if (auto *fn = callbacks_.get<void()>("screenshot"); fn && ImGui::MenuItem("Screenshot", "F12"))
+                (*fn)();
+
+            if (ImGui::MenuItem("Load Scene"))
+            {
+                FilePicker::get().query({"json", "", "Load Scene"}, false, [this](const std::string &destination)
+                                        {
+                    if(auto* fn = callbacks_.get<void(std::string)>("sceneLoaded"))
+                        (*fn)(destination); });
+            }
+
+            if (auto *fn = callbacks_.get<void(std::optional<std::string>)>("sceneSaved"); fn && ImGui::MenuItem("Save Scene"))
+                (*fn)(std::nullopt);
+
+            if (ImGui::MenuItem("Save Scene As"))
+            {
+                FilePicker::get().query({"json", "scene", "Save Scene"}, true, [this](const std::string &destination)
+                                        {
+                    if(auto* fn = callbacks_.get<void(std::optional<std::string>)>("sceneSaved"))
+                        (*fn)(destination); });
+            }
 
             if (ImGui::MenuItem("Load Settings"))
             {
                 FilePicker::get().query({"cfg", "", "Load Settings"}, false, [this](const std::string &destination)
                                         {
                     Settings::get().loadFromFile(destination, true); 
-                    if(callbacks_.onSettingsLoaded)
-                        callbacks_.onSettingsLoaded(); });
+                    if(auto* fn = callbacks_.get<void()>("settingsLoaded"))
+                        (*fn)(); });
             }
 
             if (ImGui::MenuItem("Save Settings"))
                 Settings::get().saveToFile();
 
-            if (ImGui::MenuItem("Save Settings to File"))
+            if (ImGui::MenuItem("Save Settings As"))
             {
                 FilePicker::get().query({"cfg", "", "Save Settings"}, true, [this](const std::string &destination)
                                         { Settings::get().saveToFile(destination); });
@@ -176,16 +195,16 @@ void GUI::render(const ViewportData &data)
 
         ImGui::SeparatorText("Render Settings");
 
-        if (ImGui::Checkbox("Frame Accumulation Enabled", &isAccumulationEnabled) && callbacks_.onAccumulationChanged)
+        if (auto *fn = callbacks_.get<void(bool)>("accumulationChanged"); fn && ImGui::Checkbox("Frame Accumulation Enabled", &isAccumulationEnabled))
         {
             s.setValue("accumulationDefaultEnabled", isAccumulationEnabled);
-            callbacks_.onAccumulationChanged(isAccumulationEnabled);
+            (*fn)(isAccumulationEnabled);
         }
 
-        if (ImGui::Checkbox("SSAA Enabled", &isSSAAEnabled) && callbacks_.onSSAAChanged)
+        if (auto *fn = callbacks_.get<void(bool)>("SSAAChanged"); fn && ImGui::Checkbox("SSAA Enabled", &isSSAAEnabled))
         {
             s.setValue("SSAADefaultEnabled", isSSAAEnabled);
-            callbacks_.onSSAAChanged(isSSAAEnabled);
+            (*fn)(isSSAAEnabled);
         }
 
         if (ImGui::Checkbox("VSync Enabled", &isVSyncEnabled))
@@ -194,23 +213,23 @@ void GUI::render(const ViewportData &data)
             glfwSwapInterval(isVSyncEnabled ? 1 : 0);
         }
 
-        if (callbacks_.onMaxBounceChanged)
+        if (auto *fn = callbacks_.get<void(uint32_t)>("maxBounceChanged"))
         {
             ImGui::Text("Max Ray Bounces");
             if (ImGui::InputInt("##maxBounce", &maxBounce))
             {
                 maxBounce = std::max(maxBounce, 0);
-                callbacks_.onMaxBounceChanged(static_cast<uint32_t>(maxBounce));
+                (*fn)(static_cast<uint32_t>(maxBounce));
             }
         }
 
-        if (callbacks_.onRaysPerPixelChanged)
+        if (auto *fn = callbacks_.get<void(uint32_t)>("raysPerPixelChanged"))
         {
             ImGui::Text("Rays Per Pixel");
             if (ImGui::InputInt("##raysPerPixel", &raysPerPixel))
             {
                 raysPerPixel = std::max(raysPerPixel, 0);
-                callbacks_.onRaysPerPixelChanged(static_cast<uint32_t>(raysPerPixel));
+                (*fn)(static_cast<uint32_t>(raysPerPixel));
             }
         }
 

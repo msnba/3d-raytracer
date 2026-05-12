@@ -1,8 +1,8 @@
 #pragma once
 
-#include "scene.h"
+#include <span>
 
-typedef unsigned int GLuint;
+#include "scene.h"
 
 enum class RebuildFlags : uint8_t
 {
@@ -43,6 +43,18 @@ private:
     static constexpr GLuint SLOT_DATA_ = 4;
 
     void uploadBuffer(GLuint &ssbo, GLuint slot, const void *data, size_t size);
+
+    template <typename T_>
+    void uploadBuffer(GLuint &ssbo, GLuint slot, std::span<T_> data)
+    {
+        uploadBuffer(ssbo, slot, data.data(), data.size_bytes());
+    }
+
+    template <typename T_>
+    void uploadBuffer(GLuint &ssbo, GLuint slot, const std::vector<T_> &data)
+    {
+        uploadBuffer(ssbo, slot, std::span<const T_>(data.data(), data.size()));
+    }
 };
 
 inline RebuildFlags operator|(RebuildFlags a, RebuildFlags b)

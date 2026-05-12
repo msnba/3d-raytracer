@@ -8,7 +8,6 @@
 #include "object.h"
 #include "shader.h"
 #include "gui.h"
-#include "scene.h"
 #include "scene_uploader.h"
 
 class Viewport
@@ -46,6 +45,7 @@ private:
     Shader raytrace_;
 
     SceneUploader sceneUploader_;
+    RebuildFlags pendingRebuild_ = RebuildFlags::None;
 
     unsigned int quadVBO_ = 0, quadVAO_ = 0;
     unsigned int accumTexture_ = 0;

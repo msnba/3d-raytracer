@@ -20,7 +20,6 @@ public:
     bool loadFromFile(const std::string &filepath, bool saveLast);
     bool loadFromSource(const char *source, bool saveLast);
 
-    bool saveToFileImpl(const std::string &filepath) const;
     bool saveToFile(const std::string &filepath) const;
     bool saveToFile() const;
 

@@ -24,10 +24,10 @@ int main()
     if (!Settings::get().loadFromSource(DEFAULT_SETTINGS, false))
         throw std::runtime_error("Default settings cannot be loaded.");
 
-    std::unique_ptr<Window> window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "Window", false);
-    std::unique_ptr<Camera> camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
-    std::unique_ptr<GUI> gui = std::make_unique<GUI>(window->window);
-    std::shared_ptr scene = std::make_shared<Scene>();
+    auto window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "Window", false);
+    auto gui = std::make_unique<GUI>(window->window);
+    auto camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
+    auto scene = std::make_shared<Scene>();
 
     Object::Material dragonMaterial{
         {1.f, 1.f, 1.f},      // color
@@ -79,9 +79,7 @@ int main()
 
     // -- Render Loop --
     while (!viewport.shouldClose())
-    {
         viewport.update();
-    }
 
     return 0;
 }

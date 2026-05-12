@@ -2,6 +2,7 @@
 
 #include "scene_uploader.h"
 #include "bvh.h"
+#include "log.h"
 
 SceneUploader::~SceneUploader()
 {
@@ -19,6 +20,7 @@ SceneUploader::~SceneUploader()
 
 void SceneUploader::upload(const Scene &scene, RebuildFlags flags)
 {
+    Log::info("rebuilt scene");
     if (hasFlag(flags, RebuildFlags::Spheres))
     {
         std::vector<Sphere *> spheres = scene.getObjectsOfType<Sphere>();
@@ -48,8 +50,8 @@ void SceneUploader::upload(const Scene &scene, RebuildFlags flags)
 
         BVH bvh(gpuTriangles);
 
-        uploadBuffer(triSSBO_, SLOT_TRIANGLES_, bvh.triangles_.data(), bvh.triangles_.size() * sizeof(GPUTriangle));
-        uploadBuffer(bvhSSBO_, SLOT_BVH_, bvh.nodes_.data(), bvh.nodes_.size() * sizeof(BVH::GPUNode));
+        uploadBuffer(triSSBO_, SLOT_TRIANGLES_, bvh.triangles_);
+        uploadBuffer(bvhSSBO_, SLOT_BVH_, bvh.nodes_);
     }
 
     if (hasFlag(flags, RebuildFlags::SceneData))

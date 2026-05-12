@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <memory>
 #include <functional>
+#include <any>
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -26,13 +27,24 @@ struct ViewportData
 
 struct ViewportCallbacks
 {
-    std::function<void(uint32_t)> onMaxBounceChanged = nullptr;
-    std::function<void(uint32_t)> onRaysPerPixelChanged = nullptr;
-    std::function<void(bool)> onSSAAChanged = nullptr;
-    std::function<void()> onScreenshot = nullptr;
-    std::function<void()> onToggleFullscreen = nullptr;
-    std::function<void(bool)> onAccumulationChanged = nullptr;
-    std::function<void()> onSettingsLoaded = nullptr;
+
+    template <typename Fn>
+    void set(const std::string &name, Fn &&fn)
+    {
+        callbacks[name] = std::function(std::forward<Fn>(fn));
+    }
+
+    template <typename Fn>
+    std::function<Fn> *get(const std::string &name)
+    {
+        auto it = callbacks.find(name);
+        if (it == callbacks.end())
+            return nullptr;
+        return std::any_cast<std::function<Fn>>(&it->second);
+    }
+
+private:
+    std::unordered_map<std::string, std::any> callbacks;
 };
 
 class GUI

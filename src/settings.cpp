@@ -78,8 +78,9 @@ bool Settings::loadFromSource(const char *source, bool saveLast)
     return true;
 }
 
-bool Settings::saveToFileImpl(const std::string &filepath) const
+bool Settings::saveToFile(const std::string &filepath) const
 {
+    std::lock_guard lock(mutex_);
     std::ofstream file(filepath);
     if (!file.is_open())
         return false;
@@ -100,18 +101,9 @@ bool Settings::saveToFileImpl(const std::string &filepath) const
     return file.good();
 }
 
-bool Settings::saveToFile(const std::string &filepath) const
-{
-    std::lock_guard lock(mutex_);
-    return saveToFileImpl(filepath);
-}
-
 bool Settings::saveToFile() const
 {
-    std::lock_guard lock(mutex_);
-    if (currentFile_.empty())
-        return false;
-    return saveToFileImpl(currentFile_);
+    return saveToFile(currentFile_);
 }
 
 SettingValue Settings::parseValue(const std::string &value)

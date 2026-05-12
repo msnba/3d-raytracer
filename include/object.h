@@ -32,6 +32,8 @@ public:
     Object(Transform transform, Material material) : transform_(transform), material_(material) {}
     virtual ~Object() = default; // makes dynamic casting work, just trust me bro
 
+    virtual std::string typeName() const = 0;
+
     uint32_t materialIdx_ = 0;
 };
 
@@ -41,6 +43,8 @@ public:
     Sphere() = default;
     Sphere(glm::vec3 position, float radius, Material material) : Object({position, {0, 0, 0}, glm::vec3(radius)}, material), radius_(radius) {}
 
+    std::string typeName() const override { return "sphere"; };
+
     float radius_;
 };
 
@@ -49,11 +53,14 @@ class Mesh : public Object
 public:
     Mesh() = default;
     Mesh(Transform transform, Material material, std::vector<tinyobj::index_t> indices, std::vector<glm::vec3> vertices) : Object(transform, material), indices_(indices), vertices_(vertices) {}
-    Mesh(const std::string &path, Transform transform, Material material) : Object(transform, material)
+    Mesh(const std::string &path, Transform transform, Material material) : Object(transform, material), path_(path)
     {
         loadMeshFromPath(path);
     }
 
+    std::string typeName() const override { return "mesh"; };
+
+    std::string path_;
     std::vector<tinyobj::index_t> indices_;
     std::vector<glm::vec3> vertices_;
     glm::vec3 minBounds_ = glm::vec3(std::numeric_limits<float>::max());
@@ -135,6 +142,8 @@ public:
         minBounds_ = glm::vec3(-0.5f);
         maxBounds_ = glm::vec3(0.5f);
     }
+
+    std::string typeName() const override { return "cube"; };
 };
 
 struct GPUMaterial
