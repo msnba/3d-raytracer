@@ -89,7 +89,7 @@ public:
             {-0.5f, 0.5f, 0.5f},
         };
 
-        // 12 triangles, wound CCW when viewed from outside
+        // 12 triangles, wound CCW when viewed from outside, formatter makes it like this
         static const int faceIndices[36] = {
             0,
             2,

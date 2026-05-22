@@ -98,6 +98,8 @@ void GUI::render(const ViewportData &data)
             if (auto *fn = callbacks_.get<void()>("screenshot"); fn && ImGui::MenuItem("Screenshot", "F12"))
                 (*fn)();
 
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Load Scene"))
             {
                 FilePicker::get().query({"json", "", "Load Scene"}, false, [this](const std::string &destination)
@@ -116,6 +118,8 @@ void GUI::render(const ViewportData &data)
                     if(auto* fn = callbacks_.get<void(std::optional<std::string>)>("sceneSaved"))
                         (*fn)(destination); });
             }
+
+            ImGui::Separator();
 
             if (ImGui::MenuItem("Load Settings"))
             {

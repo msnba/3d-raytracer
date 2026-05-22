@@ -28,12 +28,6 @@ public:
     BVH(std::vector<GPUTriangle> &triangles);
 
 private:
-    void growNodeToInclude(GPUNode &node, const glm::vec3 &point);
-    void growNodeToInclude(GPUNode &node, const GPUTriangle &triangle);
-    void split(const uint32_t nodeIndex, const size_t depth = 0);
-
-    float surfaceArea(const glm::vec3 &min, const glm::vec3 &max) const;
-    float surfaceArea(const GPUNode &node) const;
     struct Bin
     {
         glm::vec4 min = glm::vec4((std::numeric_limits<float>::max)());
@@ -46,6 +40,14 @@ private:
         float pos;
         float cost;
     };
+
+    void growNodeToInclude(GPUNode &node, const glm::vec3 &point);
+    void growNodeToInclude(GPUNode &node, const GPUTriangle &triangle);
+    void split(const uint32_t nodeIndex, const size_t depth = 0);
+
+    float surfaceArea(const glm::vec3 &min, const glm::vec3 &max) const;
+    float surfaceArea(const GPUNode &node) const;
+
     void growBinToInclude(Bin &bin, const GPUTriangle &tri);
     SplitResult findBestSplit(const GPUNode &node);
 };
