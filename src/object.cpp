@@ -1,5 +1,6 @@
 #include "object.h"
 #include "log.h"
+#include "bvh.h"
 
 #include <iostream>
 
@@ -67,84 +68,129 @@ std::vector<GPUSphere> convertToGPUObject(const std::vector<Sphere *> &spheres)
     return outSpheres;
 }
 
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Mesh &mesh)
+MeshGPUData buildMeshGPUData(const Mesh &mesh, uint32_t transformIdx)
 {
-    std::vector<GPUTriangle> outTriangles;
-    glm::mat4 model = getMatrix(mesh.transform_);
+    MeshGPUData out;
 
+    // Build object-space triangles — no model matrix applied.
     for (size_t i = 0; i + 2 < mesh.indices_.size(); i += 3)
     {
         GPUTriangle tri{};
-
-        tri.a = model * glm::vec4(mesh.vertices_[static_cast<size_t>(mesh.indices_[i].vertex_index)], 1.0f);
-        tri.b = model * glm::vec4(mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 1].vertex_index)], 1.0f);
-        tri.c = model * glm::vec4(mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 2].vertex_index)], 1.0f);
-
+        tri.a = mesh.vertices_[static_cast<size_t>(mesh.indices_[i].vertex_index)];
+        tri.b = mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 1].vertex_index)];
+        tri.c = mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 2].vertex_index)];
         tri.materialIdx = mesh.materialIdx_;
-        tri.pad0 = 0;
-        tri.pad1 = 0;
-
-        outTriangles.push_back(tri);
+        tri.transformIdx = transformIdx;
+        out.triangles.push_back(tri);
     }
 
-    glm::vec3 corners[8] = {// just hard programmed in the corners
-                            mesh.minBounds_,
-                            {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
-                            {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-                            {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-                            {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
-                            {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-                            {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-                            mesh.maxBounds_};
+    // Build BLAS in object space.
+    BVH blas(out.triangles);
+    out.blasNodes = blas.nodes_;
+    out.triangles = blas.triangles_; // BVH reorders triangles, take the reordered copy
+
+    // Populate TLAS entry — offsets are filled in by packMeshes().
+    out.tlasEntry.blasOffset = 0; // filled later
+    out.tlasEntry.triOffset = 0;  // filled later
+    out.tlasEntry.triCount = static_cast<uint32_t>(out.triangles.size());
+    out.tlasEntry.transformIdx = transformIdx;
+
+    // World-space AABB — transform the 8 object-space corners.
+    glm::mat4 model = getMatrix(mesh.transform_);
+    glm::vec3 corners[8] = {
+        mesh.minBounds_,
+        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
+        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+        {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
+        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+        {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+        mesh.maxBounds_};
 
     glm::vec3 worldMin(std::numeric_limits<float>::max());
-    glm::vec3 worldMax(std::numeric_limits<float>::lowest());
-
-    for (int i = 0; i < 8; i++)
+    glm::vec3 worldMax(-std::numeric_limits<float>::max());
+    for (const glm::vec3 &c : corners)
     {
-        glm::vec3 worldCorner = glm::vec3(model * glm::vec4(corners[i], 1.0f));
-        worldMin = glm::min(worldMin, worldCorner);
-        worldMax = glm::max(worldMax, worldCorner);
+        glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
+        worldMin = glm::min(worldMin, wc);
+        worldMax = glm::max(worldMax, wc);
     }
+    out.tlasEntry.worldMin = glm::vec4(worldMin, 0.0f);
+    out.tlasEntry.worldMax = glm::vec4(worldMax, 0.0f);
 
-    GPUMesh gpuMesh{
-        glm::uvec4(0,
-                   static_cast<uint32_t>(mesh.indices_.size() / 3),
-                   mesh.materialIdx_, 0),
-        glm::vec4(worldMin, 0),
-        glm::vec4(worldMax, 0)};
-
-    return std::pair(gpuMesh, outTriangles);
+    return out;
 }
 
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Mesh *> &meshes)
+PackedSceneGeometry packMeshes(const std::vector<Mesh *> &meshes)
 {
-    std::vector<GPUMesh> outMeshes;
-    std::vector<GPUTriangle> outTriangles;
-    size_t triOffset = 0;
+    PackedSceneGeometry packed;
+    uint32_t blasOffset = 0;
+    uint32_t triOffset = 0;
 
+    for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++)
+    {
+        MeshGPUData data = buildMeshGPUData(*meshes[i], i);
+
+        data.tlasEntry.blasOffset = blasOffset;
+        data.tlasEntry.triOffset = triOffset;
+
+        blasOffset += static_cast<uint32_t>(data.blasNodes.size());
+        triOffset += static_cast<uint32_t>(data.triangles.size());
+
+        packed.blasNodes.insert(packed.blasNodes.end(), data.blasNodes.begin(), data.blasNodes.end());
+        packed.triangles.insert(packed.triangles.end(), data.triangles.begin(), data.triangles.end());
+        packed.tlasEntries.push_back(data.tlasEntry);
+    }
+
+    return packed;
+}
+
+void rebuildTLAS(std::vector<GPUTLASEntry> &entries, const std::vector<Mesh *> &meshes)
+{
+    // Only recomputes world-space AABBs and transformIdx.
+    // BLAS offsets and tri offsets are unchanged — don't touch them.
+    for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++)
+    {
+        const Mesh &mesh = *meshes[i];
+        GPUTLASEntry &entry = entries[i];
+
+        entry.transformIdx = i;
+
+        glm::mat4 model = getMatrix(mesh.transform_);
+        glm::vec3 corners[8] = {
+            mesh.minBounds_,
+            {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
+            {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+            {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+            {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
+            {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+            {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+            mesh.maxBounds_};
+
+        glm::vec3 worldMin(std::numeric_limits<float>::max());
+        glm::vec3 worldMax(-std::numeric_limits<float>::max());
+        for (const glm::vec3 &c : corners)
+        {
+            glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
+            worldMin = glm::min(worldMin, wc);
+            worldMax = glm::max(worldMax, wc);
+        }
+        entry.worldMin = glm::vec4(worldMin, 0.0f);
+        entry.worldMax = glm::vec4(worldMax, 0.0f);
+    }
+}
+
+GPUTransform buildGPUTransform(const Mesh &mesh)
+{
+    glm::mat4 model = getMatrix(mesh.transform_);
+    glm::mat4 inv = glm::inverse(model);
+    return GPUTransform{model, inv, glm::transpose(inv)};
+}
+std::vector<GPUTransform> buildGPUTransforms(const std::vector<Mesh *> &meshes)
+{
+    std::vector<GPUTransform> out;
+    out.reserve(meshes.size());
     for (const Mesh *mesh : meshes)
-    {
-        auto [gpuMesh, tris] = convertToGPUObject(*mesh);
-        gpuMesh.data.x = static_cast<uint32_t>(triOffset);
-        triOffset += tris.size();
-        outMeshes.push_back(gpuMesh);
-        outTriangles.insert(outTriangles.end(), tris.begin(), tris.end());
-    }
-
-    return {outMeshes, outTriangles};
-}
-
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Cube &cube)
-{
-    return convertToGPUObject(static_cast<const Mesh &>(cube));
-}
-
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Cube *> &cubes)
-{
-    std::vector<Mesh *> meshes;
-    meshes.reserve(cubes.size());
-    for (Cube *cube : cubes)
-        meshes.push_back(static_cast<Mesh *>(cube));
-    return convertToGPUObject(meshes);
+        out.push_back(buildGPUTransform(*mesh));
+    return out;
 }

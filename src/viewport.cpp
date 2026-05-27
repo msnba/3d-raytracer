@@ -66,6 +66,7 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
                             }; });
+
     callbacks.set("raysPerPixelChanged", [this](uint32_t numRaysPerPixel)
                   { 
                             if(std::shared_ptr<Scene> pScene = scene_.lock()){
@@ -76,6 +77,7 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
                             }; });
+
     callbacks.set("SSAAChanged", [this](bool isSSAAEnabled)
                   {  
                             if(std::shared_ptr<Scene> pScene = scene_.lock()){
@@ -85,15 +87,20 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
 
                                 sceneUploader_.upload(*pScene, RebuildFlags::SceneData);
                                 accumFrameIndex_ = 0;
+
                             }; });
     callbacks.set("screenshot", [this]()
                   { isScreenshot_ = true; });
+
     callbacks.set("toggleFullscreen", [this]()
                   { fullscreenPressed_ = true; });
+
     callbacks.set("accumulationChanged", [this](bool isAccumulationEnabled)
                   { isAccumulationEnabled_ = isAccumulationEnabled; });
+
     callbacks.set("settingsLoaded", [this]()
                   { isAccumulationEnabled_ = Settings::get().getValue("accumulationDefaultEnabled", true); });
+
     callbacks.set("sceneLoaded", [this](std::string destination)
                   {
                       if (auto scene = scene_.lock())
@@ -107,6 +114,10 @@ Viewport::Viewport(std::unique_ptr<Window> window, std::unique_ptr<Camera> camer
                 scene->saveToFile(*destination);
             else
                 scene->saveToFile(); } });
+
+    // setup for future gizmo
+    callbacks.set("objectTransformChanged", [this]()
+                  { pendingRebuild_ = pendingRebuild_ | RebuildFlags::Transforms; });
 
     gui_->setCallbacks(callbacks);
 
@@ -132,6 +143,14 @@ void Viewport::update()
     float currentFrame = (float)glfwGetTime();
     deltaTime_ = currentFrame - lastFrame_;
     lastFrame_ = currentFrame;
+
+    static int ticker = 0;
+    if (auto scene = scene_.lock(); scene && ticker < 50)
+    {
+        scene->objects_[0]->transform_.position += glm::vec3(0, 0.01, 0);
+        pendingRebuild_ = pendingRebuild_ | RebuildFlags::Transforms;
+        ticker++;
+    }
 
     if (pendingRebuild_ != RebuildFlags::None)
     {

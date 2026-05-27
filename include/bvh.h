@@ -11,16 +11,6 @@ public:
     static constexpr int BVH_LEAF_TRIANGLES = 6;
     static constexpr int SAH_NUM_BINS = 12;
 
-    struct GPUNode
-    {
-        glm::vec4 min;
-        glm::vec4 max;
-        uint32_t left;
-        uint32_t right;
-        uint32_t triangleCount; // 0 = interior, >0 = leaf
-        uint32_t pad;
-    };
-
     std::vector<GPUNode> nodes_;
     std::vector<GPUTriangle> triangles_;
 

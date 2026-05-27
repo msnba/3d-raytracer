@@ -35,6 +35,7 @@ public:
     virtual std::string typeName() const = 0;
 
     uint32_t materialIdx_ = 0;
+    uint32_t transformIdx_ = 0;
 };
 
 class Sphere : public Object
@@ -163,10 +164,20 @@ struct GPUTriangle
     uint32_t materialIdx;
 
     glm::vec3 b;
-    uint32_t pad0;
+    uint32_t transformIdx;
 
     glm::vec3 c;
-    uint32_t pad1;
+    uint32_t pad0 = 0;
+};
+
+struct GPUNode
+{
+    glm::vec4 min;
+    glm::vec4 max;
+    uint32_t left;
+    uint32_t right;
+    uint32_t triangleCount; // 0 = interior, >0 = leaf
+    uint32_t pad;
 };
 
 struct GPUSphere
@@ -183,21 +194,47 @@ struct GPUSphere
     float pad1;
 };
 
-struct GPUMesh
+struct GPUTransform
 {
-    glm::uvec4 data; // firstTriangle, triangleCount, materialIdx, pad
-    glm::vec4 minBounds;
-    glm::vec4 maxBounds;
+    glm::mat4 modelMatrix;
+    glm::mat4 invModelMatrix;
+    glm::mat4 normalMatrix;
 };
 
 GPUSphere convertToGPUObject(const Sphere &sphere);
 std::vector<GPUSphere> convertToGPUObject(const std::vector<Sphere *> &spheres);
 
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Mesh &mesh);
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Mesh *> &meshes);
+struct GPUTLASEntry
+{
+    glm::vec4 worldMin; // transformed from object-space bounds
+    glm::vec4 worldMax;
+    uint32_t blasOffset; // index of mesh root BVH node in the packed BLAS array
+    uint32_t triOffset;
+    uint32_t triCount;
+    uint32_t transformIdx;
+};
 
-std::pair<GPUMesh, std::vector<GPUTriangle>> convertToGPUObject(const Cube &cube);
-std::pair<std::vector<GPUMesh>, std::vector<GPUTriangle>> convertToGPUObject(const std::vector<Cube *> &cubes);
+struct MeshGPUData
+{
+    std::vector<GPUNode> blasNodes;
+    std::vector<GPUTriangle> triangles;
+    GPUTLASEntry tlasEntry;
+};
+
+MeshGPUData buildMeshGPUData(const Mesh &mesh, uint32_t transformIdx);
+
+struct PackedSceneGeometry
+{
+    std::vector<GPUNode> blasNodes;        // all BLASes concatenated
+    std::vector<GPUTriangle> triangles;    // all triangles concatenated
+    std::vector<GPUTLASEntry> tlasEntries; // one per mesh, with offsets filled in
+};
+PackedSceneGeometry packMeshes(const std::vector<Mesh *> &meshes);
+
+void rebuildTLAS(std::vector<GPUTLASEntry> &entries, const std::vector<Mesh *> &meshes);
+
+GPUTransform buildGPUTransform(const Mesh &mesh);
+std::vector<GPUTransform> buildGPUTransforms(const std::vector<Mesh *> &meshes);
 
 inline glm::vec3 pos(const tinyobj::index_t &idx, const tinyobj::attrib_t &attrib)
 {

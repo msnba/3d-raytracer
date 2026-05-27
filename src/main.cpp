@@ -33,7 +33,7 @@ int main()
         {1.f, 1.f, 1.f},      // color
         0.f,                  // smoothness
         {0.f, 0.f, 0.f, 0.f}, // emission color + strength
-        .9f,                  // transparency
+        0,                    // transparency
         1.5f                  // ior
     };
 

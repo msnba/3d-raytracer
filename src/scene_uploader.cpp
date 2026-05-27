@@ -12,10 +12,14 @@ SceneUploader::~SceneUploader()
         glDeleteBuffers(1, &matSSBO_);
     if (triSSBO_)
         glDeleteBuffers(1, &triSSBO_);
-    if (bvhSSBO_)
-        glDeleteBuffers(1, &bvhSSBO_);
+    if (blasSSBO_)
+        glDeleteBuffers(1, &blasSSBO_);
     if (dataSSBO_)
         glDeleteBuffers(1, &dataSSBO_);
+    if (tlasSSBO_)
+        glDeleteBuffers(1, &tlasSSBO_);
+    if (transformSSBO_)
+        glDeleteBuffers(1, &transformSSBO_);
 }
 
 void SceneUploader::upload(const Scene &scene, RebuildFlags flags)
@@ -46,12 +50,36 @@ void SceneUploader::upload(const Scene &scene, RebuildFlags flags)
     if (hasFlag(flags, RebuildFlags::Geometry))
     {
         std::vector<Mesh *> meshes = scene.getObjectsOfType<Mesh>();
-        auto [gpuMeshes, gpuTriangles] = convertToGPUObject(meshes);
+        PackedSceneGeometry packed = packMeshes(meshes);
 
-        BVH bvh(gpuTriangles);
+        cachedTLASEntries_ = packed.tlasEntries;
 
-        uploadBuffer(triSSBO_, SLOT_TRIANGLES_, bvh.triangles_);
-        uploadBuffer(bvhSSBO_, SLOT_BVH_, bvh.nodes_);
+        uploadBuffer(triSSBO_, SLOT_TRIANGLES_, packed.triangles);
+        uploadBuffer(blasSSBO_, SLOT_BLAS_, packed.blasNodes);
+        uploadBuffer(tlasSSBO_, SLOT_TLAS_, packed.tlasEntries);
+
+        std::vector<GPUTransform> transforms = buildGPUTransforms(meshes);
+        uploadBuffer(transformSSBO_, SLOT_TRANSFORMS_, transforms);
+    }
+
+    if (hasFlag(flags, RebuildFlags::Transforms) && !hasFlag(flags, RebuildFlags::Geometry))
+    {
+        // meshes
+        std::vector<Mesh *> meshes = scene.getObjectsOfType<Mesh>();
+
+        rebuildTLAS(cachedTLASEntries_, meshes);
+        uploadBuffer(tlasSSBO_, SLOT_TLAS_, cachedTLASEntries_);
+
+        std::vector<GPUTransform> transforms = buildGPUTransforms(meshes);
+        uploadBuffer(transformSSBO_, SLOT_TRANSFORMS_, transforms);
+
+        // spheres (position reupload)
+        std::vector<Sphere *> spheres = scene.getObjectsOfType<Sphere>();
+        std::vector<GPUSphere> gpuSpheres;
+        gpuSpheres.reserve(spheres.size());
+        for (Sphere *s : spheres)
+            gpuSpheres.push_back(convertToGPUObject(*s));
+        uploadBuffer(sphereSSBO_, SLOT_SPHERES_, gpuSpheres.data(), gpuSpheres.size() * sizeof(GPUSphere));
     }
 
     if (hasFlag(flags, RebuildFlags::SceneData))
@@ -100,8 +128,12 @@ void SceneUploader::bindAll() const
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_MATERIALS_, matSSBO_);
     if (triSSBO_)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_TRIANGLES_, triSSBO_);
-    if (bvhSSBO_)
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_BVH_, bvhSSBO_);
+    if (blasSSBO_)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_BLAS_, blasSSBO_);
     if (dataSSBO_)
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_DATA_, dataSSBO_);
+    if (tlasSSBO_)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_TLAS_, tlasSSBO_);
+    if (transformSSBO_)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_TRANSFORMS_, transformSSBO_);
 }

@@ -32,15 +32,21 @@ private:
     GLuint sphereSSBO_ = 0;
     GLuint matSSBO_ = 0;
     GLuint triSSBO_ = 0;
-    GLuint bvhSSBO_ = 0;
+    GLuint blasSSBO_ = 0;
     GLuint dataSSBO_ = 0;
+    GLuint tlasSSBO_ = 0;
+    GLuint transformSSBO_ = 0;
 
     // binding slots
     static constexpr GLuint SLOT_SPHERES_ = 0;
     static constexpr GLuint SLOT_MATERIALS_ = 1;
     static constexpr GLuint SLOT_TRIANGLES_ = 2;
-    static constexpr GLuint SLOT_BVH_ = 3;
+    static constexpr GLuint SLOT_BLAS_ = 3;
     static constexpr GLuint SLOT_DATA_ = 4;
+    static constexpr GLuint SLOT_TLAS_ = 5;
+    static constexpr GLuint SLOT_TRANSFORMS_ = 6;
+
+    std::vector<GPUTLASEntry> cachedTLASEntries_;
 
     void uploadBuffer(GLuint &ssbo, GLuint slot, const void *data, size_t size);
 

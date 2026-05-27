@@ -46,10 +46,10 @@ struct Triangle {
     uint materialIdx;
     
     vec3 b;
-    uint pad0;
+    uint transformIdx;
 
     vec3 c;
-    uint pad1;
+    uint pad0;
 };
 
 struct Sphere {
@@ -67,6 +67,21 @@ struct BVHNode {
     uint pad;
 };
 
+struct TLASEntry {
+    vec4     worldMin;
+    vec4     worldMax;
+    uint     blasOffset;
+    uint     triOffset;
+    uint     triCount;
+    uint     transformIdx;
+};
+
+struct Transform {
+    mat4 model;
+    mat4 invModel;
+    mat4 normalMatrix;
+};
+
 // -- SSBOs --
 
 layout(std430, binding = 0) buffer Spheres {
@@ -81,8 +96,8 @@ layout(std430, binding = 2) buffer Triangles {
     Triangle triangles[];
 };
 
-layout(std430, binding = 3) buffer BVHNodes {
-    BVHNode nodes[];
+layout(std430, binding = 3) buffer BLASNodes {
+    BVHNode blasNodes[];
 };
 
 layout(std430, binding = 4) buffer Data {
@@ -91,7 +106,35 @@ layout(std430, binding = 4) buffer Data {
     uint SSAA;
 };
 
+layout(std430, binding = 5) buffer TLASEntries {
+    TLASEntry tlasEntries[];
+};
+
+layout(std430, binding = 6) buffer Transforms {
+    Transform transforms[];
+};
+
 // -- Functions --
+
+Ray worldToObject(Ray ray, uint transformIdx){
+    mat4 invModel = transforms[transformIdx].invModel;
+    Ray objRay;
+    objRay.origin    = vec3(invModel * vec4(ray.origin,    1.0));
+    objRay.direction = vec3(invModel * vec4(ray.direction, 0.0));
+    return objRay;
+}
+
+Ray objectToWorld(Ray ray, uint transformIdx){
+    mat4 model = transforms[transformIdx].model;
+    Ray worldRay;
+    worldRay.origin    = vec3(model * vec4(ray.origin,    1.0));
+    worldRay.direction = vec3(model * vec4(ray.direction, 0.0));
+    return worldRay;
+}
+
+vec3 transformNormal(vec3 normal, uint transformIdx) {
+    return normalize(vec3(transforms[transformIdx].normalMatrix * vec4(normal, 0.0)));
+}
 
 Collision raySphere(Ray ray, Sphere s){
     Collision collision;
@@ -137,15 +180,17 @@ Collision rayTriangle(Ray ray, Triangle tri){
     Collision c;
     c.didHit = 0;
 
-    vec3 edge1 = tri.b.xyz - tri.a.xyz;
-    vec3 edge2 = tri.c.xyz - tri.a.xyz;
-    vec3 normalVec = cross(edge1, edge2);
-    float det = -dot(ray.direction, normalVec);
-    if(abs(det) < 0.0f) return c;
+    Ray objRay = worldToObject(ray, tri.transformIdx);
 
-    float invDet = 1.0f/det;
-    vec3 ao = ray.origin - tri.a.xyz;
-    vec3 dao = cross(ao, ray.direction);
+    vec3 edge1 = tri.b - tri.a;
+    vec3 edge2 = tri.c - tri.a;
+    vec3 normalVec = cross(edge1, edge2);
+    float det = -dot(objRay.direction, normalVec);
+    // if(abs(det) < 1e-10) return c;
+
+    float invDet = 1.0 / det;
+    vec3 ao = objRay.origin - tri.a;
+    vec3 dao = cross(ao, objRay.direction);
     float u = dot(edge2, dao) * invDet;
     if(u < 0.0f || u > 1.0f) return c;
 
@@ -156,8 +201,8 @@ Collision rayTriangle(Ray ray, Triangle tri){
     if(dist <= 0.0) return c;
 
     c.didHit = 1;
-    c.hitPoint = ray.origin + ray.direction * dist;
-    c.normal = normalize(normalVec);
+    c.hitPoint = ray.origin + ray.direction * dist; 
+    c.normal = transformNormal(normalize(normalVec), tri.transformIdx);
     c.distance = dist;
     c.material = materials[tri.materialIdx];
 
@@ -185,33 +230,34 @@ float rayTriangleDist(Ray ray, Triangle tri){
     return dist > 0.0 ? dist : 1e30;
 }
 
-Collision rayBVH(Ray ray){
+// object space ray
+Hit rayBLAS(Ray ray, uint blasOffset, uint triOffset, uint triCount, float maxDist){
     Hit bestHit;
-    bestHit.distance = 1e30;
+    bestHit.distance = maxDist;
     bestHit.triangleIdx = 0xFFFFFFFF;
 
-    vec3 invDir = 1.0f / ray.direction;
+    vec3 invDir = 1.0 / ray.direction;
 
     uint stack[64];
     uint stackPtr = 0;
-    stack[stackPtr++] = 0;
+    stack[stackPtr++] = blasOffset; // root of mesh blas
 
     while(stackPtr > 0){
         uint idx = stack[--stackPtr];
-        BVHNode node = nodes[idx];
+        BVHNode node = blasNodes[idx];
 
         if(node.triangleCount > 0){
             for(uint i = 0; i < node.triangleCount; i++){
-                uint triangleIdx = node.left + i;
-                float dist = rayTriangleDist(ray, triangles[triangleIdx]);
+                uint globalTriIdx = triOffset + node.left + i;
+                float dist = rayTriangleDist(ray, triangles[globalTriIdx]);
                 if(dist < bestHit.distance){
                     bestHit.distance = dist;
-                    bestHit.triangleIdx = triangleIdx;
+                    bestHit.triangleIdx = globalTriIdx;
                 }
             }
-        }else{
-            BVHNode leftNode  = nodes[node.left];
-            BVHNode rightNode = nodes[node.right];
+        } else {
+            BVHNode leftNode  = blasNodes[blasOffset + node.left];
+            BVHNode rightNode = blasNodes[blasOffset + node.right];
             
             float hitLeft  = rayAABB(invDir, leftNode.min.xyz,  leftNode.max.xyz,  bestHit.distance, ray.origin);
             float hitRight = rayAABB(invDir, rightNode.min.xyz, rightNode.max.xyz, bestHit.distance, ray.origin);
@@ -219,24 +265,51 @@ Collision rayBVH(Ray ray){
             // < 63 ensures room
             if(hitLeft < 1e30 && hitRight < 1e30 && stackPtr < 63){ 
                 if(hitLeft < hitRight){ 
-                    stack[stackPtr++] = node.right;
-                    stack[stackPtr++] = node.left;
+                    stack[stackPtr++] = blasOffset + node.right;
+                    stack[stackPtr++] = blasOffset + node.left;
                 } else {
-                    stack[stackPtr++] = node.left;
-                    stack[stackPtr++] = node.right;
+                    stack[stackPtr++] = blasOffset + node.left;
+                    stack[stackPtr++] = blasOffset + node.right;
                 }
             }
-            else if(hitLeft  < 1e30 && stackPtr < 64) { stack[stackPtr++] = node.left; }
-            else if(hitRight < 1e30 && stackPtr < 64) { stack[stackPtr++] = node.right; }
+            else if(hitLeft  < 1e30 && stackPtr < 64) { stack[stackPtr++] = blasOffset + node.left; }
+            else if(hitRight < 1e30 && stackPtr < 64) { stack[stackPtr++] = blasOffset + node.right; }
 
         }
     }
 
-    if(bestHit.triangleIdx != 0xFFFFFFFF)
+    return bestHit;
+}
+
+// world space ray
+Collision rayTLAS(Ray ray){
+    Hit bestHit;
+    bestHit.distance    = 1e30;
+    bestHit.triangleIdx = 0xFFFFFFFF;
+
+    for(int i = 0; i < tlasEntries.length(); i++){
+        TLASEntry entry = tlasEntries[i];
+
+        vec3 invWorldDir = 1.0 / ray.direction;
+        float tEntry = rayAABB(invWorldDir, entry.worldMin.xyz, entry.worldMax.xyz, bestHit.distance, ray.origin);
+        if (tEntry >= 1e30)
+            continue;
+
+        // transform into mesh object space
+        Ray objRay = worldToObject(ray, entry.transformIdx);
+
+        Hit h = rayBLAS(objRay, entry.blasOffset, entry.triOffset, entry.triCount, bestHit.distance); 
+        if (h.triangleIdx != 0xFFFFFFFF && h.distance < bestHit.distance){
+            bestHit.triangleIdx = h.triangleIdx;
+            bestHit.distance    = h.distance;
+        }
+    }
+
+    if (bestHit.triangleIdx != 0xFFFFFFFF)
         return rayTriangle(ray, triangles[bestHit.triangleIdx]);
-    
+
     Collision miss;
-    miss.didHit = 0;
+    miss.didHit  = 0;
     miss.distance = 1e30;
     return miss;
 }
@@ -254,7 +327,7 @@ Collision calculateRayCollision(Ray ray)
             closest = current;
     }
 
-    Collision triCollision = rayBVH(ray);
+    Collision triCollision = rayTLAS(ray);
     if(triCollision.didHit == 1 && triCollision.distance < closest.distance)
         closest = triCollision;
 
