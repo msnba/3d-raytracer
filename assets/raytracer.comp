@@ -3,12 +3,11 @@
 layout(local_size_x = 16, local_size_y = 16) in;
 layout(rgba32f, binding = 0) uniform image2D accumImage;
 
-//-- Data --
 const vec2 resolution = imageSize(accumImage);
+
 uniform vec3 cameraPos;
 uniform vec3 cameraFront;
 uniform float fov;
-
 uniform uint frameIndex;
 
 // -- Structs --
@@ -39,6 +38,8 @@ struct Collision {
 struct Hit {
     float distance;
     uint triangleIdx;
+    float u;
+    float v;
 };
 
 struct Triangle {
@@ -84,21 +85,13 @@ struct Transform {
 
 // -- SSBOs --
 
-layout(std430, binding = 0) buffer Spheres {
-    Sphere spheres[];
-};
+layout(std430, binding = 0) buffer Spheres { Sphere spheres[]; };
 
-layout(std430, binding = 1) buffer Materials {
-    Material materials[];
-};
+layout(std430, binding = 1) buffer Materials { Material materials[]; };
 
-layout(std430, binding = 2) buffer Triangles {
-    Triangle triangles[];
-};
+layout(std430, binding = 2) buffer Triangles { Triangle triangles[]; };
 
-layout(std430, binding = 3) buffer BLASNodes {
-    BVHNode blasNodes[];
-};
+layout(std430, binding = 3) buffer BLASNodes { BVHNode blasNodes[]; };
 
 layout(std430, binding = 4) buffer Data {
     uint maxBounce;
@@ -106,232 +99,34 @@ layout(std430, binding = 4) buffer Data {
     uint SSAA;
 };
 
-layout(std430, binding = 5) buffer TLASEntries {
-    TLASEntry tlasEntries[];
-};
+layout(std430, binding = 5) buffer TLASEntries { TLASEntry tlasEntries[]; };
 
-layout(std430, binding = 6) buffer Transforms {
-    Transform transforms[];
-};
+layout(std430, binding = 6) buffer Transforms { Transform transforms[]; };
 
-// -- Functions --
+// -- Helpers --
 
 Ray worldToObject(Ray ray, uint transformIdx){
     mat4 invModel = transforms[transformIdx].invModel;
-    Ray objRay;
-    objRay.origin    = vec3(invModel * vec4(ray.origin,    1.0));
-    objRay.direction = vec3(invModel * vec4(ray.direction, 0.0));
-    return objRay;
+
+    return Ray(vec3(invModel * vec4(ray.origin, 1.0)),
+               vec3(invModel * vec4(ray.direction, 0.0)));
 }
 
 Ray objectToWorld(Ray ray, uint transformIdx){
     mat4 model = transforms[transformIdx].model;
-    Ray worldRay;
-    worldRay.origin    = vec3(model * vec4(ray.origin,    1.0));
-    worldRay.direction = vec3(model * vec4(ray.direction, 0.0));
-    return worldRay;
+
+    return Ray(vec3(model * vec4(ray.origin, 1.0)),
+               vec3(model * vec4(ray.direction, 0.0)));
 }
 
 vec3 transformNormal(vec3 normal, uint transformIdx) {
     return normalize(vec3(transforms[transformIdx].normalMatrix * vec4(normal, 0.0)));
 }
 
-Collision raySphere(Ray ray, Sphere s){
-    Collision collision;
-    collision.didHit = 0;
-
-    vec3 oc = s.pos - ray.origin;
-
-    float closestApproach = dot(oc, ray.direction);
-    if(closestApproach < 0) return collision; //sphere behind ray
-
-    float distRay2 = dot(oc, oc) - closestApproach * closestApproach;
-    float r2 = s.radius * s.radius;
-
-    if(distRay2 > r2) return collision; //if distance to ray greater to radius, miss
-
-    collision.distance = closestApproach - sqrt(r2 - distRay2); //closest - distance from closest to sphere surface
-    collision.didHit = 1;
-    collision.hitPoint = ray.origin + ray.direction * collision.distance;
-    collision.normal = (collision.hitPoint - s.pos) / s.radius; // cheaper normal
-    collision.material = s.material;
-    return collision;
-}
-
-float rayAABB(vec3 invDir, vec3 minB, vec3 maxB, float maxDist, vec3 origin){
-    vec3 t0 = (minB - origin) * invDir;
-    vec3 t1 = (maxB - origin) * invDir;
-
-    vec3 tNear = min(t0, t1);
-    vec3 tFar = max(t0,t1);
-
-    float tN = max(tNear.x, max(tNear.y, tNear.z));
-
-    // explicitly calculated tF because it isn't used later
-    if(min(tFar.x, min(tFar.y, tFar.z)) < max(tN, 0.0) || tN >= maxDist) return 1e30; 
-    return tN;
-}
-
-// Moller-Trumbore algorithm
-// https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
-// adapted from https://stackoverflow.com/a/42752998
-// only called ONCE on the winning triangle in a set
-Collision rayTriangle(Ray ray, Triangle tri){
-    Collision c;
-    c.didHit = 0;
-
-    Ray objRay = worldToObject(ray, tri.transformIdx);
-
-    vec3 edge1 = tri.b - tri.a;
-    vec3 edge2 = tri.c - tri.a;
-    vec3 normalVec = cross(edge1, edge2);
-    float det = -dot(objRay.direction, normalVec);
-    // if(abs(det) < 1e-10) return c;
-
-    float invDet = 1.0 / det;
-    vec3 ao = objRay.origin - tri.a;
-    vec3 dao = cross(ao, objRay.direction);
-    float u = dot(edge2, dao) * invDet;
-    if(u < 0.0f || u > 1.0f) return c;
-
-    float v = -dot(edge1, dao) * invDet;
-    if(v < 0.0f || u + v > 1.0f) return c;
-
-    float dist = dot(ao, normalVec) * invDet;
-    if(dist <= 0.0) return c;
-
-    c.didHit = 1;
-    c.hitPoint = ray.origin + ray.direction * dist; 
-    c.normal = transformNormal(normalize(normalVec), tri.transformIdx);
-    c.distance = dist;
-    c.material = materials[tri.materialIdx];
-
-    return c;
-}
-
-// shortened triangle test
-float rayTriangleDist(Ray ray, Triangle tri){
-    vec3 edge1 = tri.b.xyz - tri.a.xyz;
-    vec3 edge2 = tri.c.xyz - tri.a.xyz;
-    vec3 normalVec = cross(edge1, edge2);
-    float det = -dot(ray.direction, normalVec);
-    if(det == 0.0) return 1e30;
-
-    float invDet = 1.0f / det;
-    vec3 ao = ray.origin - tri.a.xyz;
-    vec3 dao = cross(ao, ray.direction);
-    float u = dot(edge2, dao) * invDet;
-    if(u < 0.0 || u > 1.0) return 1e30;
-
-    float v = -dot(edge1, dao) * invDet;
-    if(v < 0.0 || u + v > 1.0) return 1e30;
-
-    float dist = dot(ao, normalVec) * invDet;
-    return dist > 0.0 ? dist : 1e30;
-}
-
-// object space ray
-Hit rayBLAS(Ray ray, uint blasOffset, uint triOffset, uint triCount, float maxDist){
-    Hit bestHit;
-    bestHit.distance = maxDist;
-    bestHit.triangleIdx = 0xFFFFFFFF;
-
-    vec3 invDir = 1.0 / ray.direction;
-
-    uint stack[64];
-    uint stackPtr = 0;
-    stack[stackPtr++] = blasOffset; // root of mesh blas
-
-    while(stackPtr > 0){
-        uint idx = stack[--stackPtr];
-        BVHNode node = blasNodes[idx];
-
-        if(node.triangleCount > 0){
-            for(uint i = 0; i < node.triangleCount; i++){
-                uint globalTriIdx = triOffset + node.left + i;
-                float dist = rayTriangleDist(ray, triangles[globalTriIdx]);
-                if(dist < bestHit.distance){
-                    bestHit.distance = dist;
-                    bestHit.triangleIdx = globalTriIdx;
-                }
-            }
-        } else {
-            BVHNode leftNode  = blasNodes[blasOffset + node.left];
-            BVHNode rightNode = blasNodes[blasOffset + node.right];
-            
-            float hitLeft  = rayAABB(invDir, leftNode.min.xyz,  leftNode.max.xyz,  bestHit.distance, ray.origin);
-            float hitRight = rayAABB(invDir, rightNode.min.xyz, rightNode.max.xyz, bestHit.distance, ray.origin);
-
-            // < 63 ensures room
-            if(hitLeft < 1e30 && hitRight < 1e30 && stackPtr < 63){ 
-                if(hitLeft < hitRight){ 
-                    stack[stackPtr++] = blasOffset + node.right;
-                    stack[stackPtr++] = blasOffset + node.left;
-                } else {
-                    stack[stackPtr++] = blasOffset + node.left;
-                    stack[stackPtr++] = blasOffset + node.right;
-                }
-            }
-            else if(hitLeft  < 1e30 && stackPtr < 64) { stack[stackPtr++] = blasOffset + node.left; }
-            else if(hitRight < 1e30 && stackPtr < 64) { stack[stackPtr++] = blasOffset + node.right; }
-
-        }
-    }
-
-    return bestHit;
-}
-
-// world space ray
-Collision rayTLAS(Ray ray){
-    Hit bestHit;
-    bestHit.distance    = 1e30;
-    bestHit.triangleIdx = 0xFFFFFFFF;
-
-    for(int i = 0; i < tlasEntries.length(); i++){
-        TLASEntry entry = tlasEntries[i];
-
-        vec3 invWorldDir = 1.0 / ray.direction;
-        float tEntry = rayAABB(invWorldDir, entry.worldMin.xyz, entry.worldMax.xyz, bestHit.distance, ray.origin);
-        if (tEntry >= 1e30)
-            continue;
-
-        // transform into mesh object space
-        Ray objRay = worldToObject(ray, entry.transformIdx);
-
-        Hit h = rayBLAS(objRay, entry.blasOffset, entry.triOffset, entry.triCount, bestHit.distance); 
-        if (h.triangleIdx != 0xFFFFFFFF && h.distance < bestHit.distance){
-            bestHit.triangleIdx = h.triangleIdx;
-            bestHit.distance    = h.distance;
-        }
-    }
-
-    if (bestHit.triangleIdx != 0xFFFFFFFF)
-        return rayTriangle(ray, triangles[bestHit.triangleIdx]);
-
-    Collision miss;
-    miss.didHit  = 0;
-    miss.distance = 1e30;
-    return miss;
-}
-
-Collision calculateRayCollision(Ray ray)
-{
-    Collision closest;
-    closest.didHit = 0;
-    closest.distance = 1e30; // very large distance as a default
-
-    for(int i = 0; i < spheres.length(); i++){
-        Collision current = raySphere(ray, spheres[i]);
-
-        if(current.didHit == 1 && current.distance < closest.distance)
-            closest = current;
-    }
-
-    Collision triCollision = rayTLAS(ray);
-    if(triCollision.didHit == 1 && triCollision.distance < closest.distance)
-        closest = triCollision;
-
-    return closest;
+uint hash(uint x) {
+    x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+    x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+    return (x >> 16u) ^ x;
 }
 
 float randomFloat(inout uint rng){
@@ -342,104 +137,282 @@ float randomFloat(inout uint rng){
     return float(result) / 4294967295.0;
 }
 
-vec3 cosineHemisphereDirection(vec3 normal, inout uint rng){
+vec3 cosineHemisphere(vec3 normal, inout uint rng){
     float u1 = randomFloat(rng);
     float u2 = randomFloat(rng);
-
     float r = sqrt(u1);
-    float theta = 2.0 * 3.1415926 * u2;
+    float phi = 2.0 * 3.1415926 * u2;
 
-    vec3 tangent = normalize(abs(normal.x) > 0.1 ? cross(vec3(0,1,0), normal) : cross(vec3(1,0,0), normal));
+    vec3 tangent = normalize(abs(normal.x) > 0.1 
+        ? cross(vec3(0, 1, 0), normal) 
+        : cross(vec3(1, 0, 0), normal));
+    vec3 bitangent = cross(normal, tangent);
 
-    return normalize(
-        r * cos(theta) * tangent + 
-        r * sin(theta) * cross(normal, tangent) +
-        sqrt(1.0 - u1) * normal
-    );
+    return  r * cos(phi) * tangent + 
+            r * sin(phi) * bitangent +
+            sqrt(1.0 - u1) * normal;
 }
 
-vec3 ambient(Ray ray){
-    // this can be over-complicated later
-    return vec3(0);
+// -- Geometry --
+
+float rayAABB(vec3 invDir, vec3 minB, vec3 maxB, float maxDist, vec3 origin){
+    vec3 t0 = (minB - origin) * invDir;
+    vec3 t1 = (maxB - origin) * invDir;
+
+    float tN = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z));
+    float tF = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), max(t0.z, t1.z));
+
+    return (tF < max(tN, 0.0) || tN >= maxDist) ? 1e30 : tN;
 }
 
-vec3 trace(Ray ray, inout uint rng){
-    vec3 incomingLight = vec3(0);
-    vec3 rayColor = vec3(1.0f);
+// Moller-Trumbore algorithm
+// https://en.wikipedia.org/wiki/Moller-Trumbore_intersection_algorithm
+// adapted from https://stackoverflow.com/a/42752998
+// shortened triangle test, distance only
+// object space
+Hit rayTriangleDist(Ray ray, Triangle tri, uint triIdx){
+    Hit miss;
+    miss.distance = 1e30;
+    miss.triangleIdx = 0xFFFFFFFF;
 
-    for(int i=0; i <= maxBounce; i++){
-        if(max(rayColor.r, max(rayColor.g, rayColor.b)) < 0.0001) break;
+    vec3 edge1 = tri.b - tri.a;
+    vec3 edge2 = tri.c - tri.a;
+    vec3 normalVec = cross(edge1, edge2);
+    float det = -dot(ray.direction, normalVec);
+    if(abs(det) == 0.0) return miss;
 
-        Collision collision = calculateRayCollision(ray);
+    float invDet = 1.0 / det;
+    vec3 ao = ray.origin - tri.a;
+    vec3 dao = cross(ao, ray.direction);
 
-        if(collision.didHit == 0){
-            incomingLight += ambient(ray);
-            break;
-        }
+    float u = dot(edge2, dao) * invDet;
+    if(u < 0.0 || u > 1.0) return miss;
 
-        Material mat = collision.material;
-        vec3 normal = collision.normal;
-        bool entering = dot(ray.direction, normal) < 0.0;
-        if(!entering) normal = -normal;
+    float v = -dot(edge1, dao) * invDet;
+    if(v < 0.0 || u + v > 1.0) return miss;
 
-        // glass 
-        if(mat.transparency > 0.0)
-        {
-            float ior = mat.ior > 0.0 ? mat.ior : 1.5;
-            float eta = entering ? (1.0 / ior) : ior;
+    float dist = dot(ao, normalVec) * invDet;
+    if(dist <= 0.0) return miss;
 
-            float cosI = abs(dot(ray.direction, normal));
-            float r0 = (1.0 - ior) / (1.0 + ior);
-            r0 = r0 * r0;
-            float fresnel = r0 + (1.0 - r0) * pow(1.0 - cosI, 5.0);
+    Hit h;
+    h.distance = dist;
+    h.triangleIdx = triIdx;
+    h.u = u;
+    h.v = v;
+    return h;
+}
 
-            vec3 refracted = refract(ray.direction, normal, eta);
-            bool tir = length(refracted) < 0.001; // total internal reflection
+// world space
+Collision resolveHit(Ray ray, Hit hit){
+    Triangle tri = triangles[hit.triangleIdx];
+    vec3 e1 = tri.b - tri.a;
+    vec3 e2 = tri.c - tri.a;
 
-            if(!tir && randomFloat(rng) < mat.transparency * (1.0 - fresnel)){ // transparency with random chance
-                // refract
-                ray.origin = collision.hitPoint - normal * 0.0005; // offset into surface
-                ray.direction = normalize(refracted);
+    Collision c;
+    c.didHit = 1;
+    c.hitPoint = ray.origin + ray.direction * hit.distance; 
+    c.normal = transformNormal(normalize(cross(e1, e2)), tri.transformIdx);
+    c.distance = hit.distance;
+    c.material = materials[tri.materialIdx];
+    return c;
+}
 
-                if (!entering) rayColor *= exp(-mat.color.rgb * collision.distance);
-            } else {
-                // reflect
-                ray.origin = collision.hitPoint + normal * 0.0005;
-                ray.direction = reflect(ray.direction, normal);
-                rayColor *= mat.color.rgb;
+// single mesh BLAS
+// object space ray
+Hit rayBLAS(Ray ray, uint blasOffset, uint triOffset, uint triCount, float maxDist){
+    Hit best;
+    best.distance = maxDist;
+    best.triangleIdx = 0xFFFFFFFF;
+
+    vec3 invDir = 1.0 / ray.direction;
+
+    uint stack[64];
+    uint stackPtr = 0;
+    stack[stackPtr++] = blasOffset; // root of mesh blas
+
+    while(stackPtr > 0){
+        BVHNode node = blasNodes[stack[--stackPtr]];
+
+        if(node.triangleCount > 0){
+            for(uint i = 0; i < node.triangleCount; i++){
+                uint triIdx = triOffset + node.left + i;
+                Hit h = rayTriangleDist(ray, triangles[triIdx], triIdx);
+                if(h.distance < best.distance)
+                    best = h;
+            }
+        } else {
+            BVHNode l  = blasNodes[blasOffset + node.left];
+            BVHNode r = blasNodes[blasOffset + node.right];
+            
+            float hitLeft  = rayAABB(invDir, l.min.xyz,  l.max.xyz,  best.distance, ray.origin);
+            float hitRight = rayAABB(invDir, r.min.xyz, r.max.xyz, best.distance, ray.origin);
+
+            // < 63 ensures room
+            if(hitLeft < 1e30 && hitRight < 1e30 && stackPtr < 63){ 
+                // push farther child first so nearer is popped first
+                if(hitLeft < hitRight){ 
+                    stack[stackPtr++] = blasOffset + node.right;
+                    stack[stackPtr++] = blasOffset + node.left;
+                } else {
+                    stack[stackPtr++] = blasOffset + node.left;
+                    stack[stackPtr++] = blasOffset + node.right;
+                }
+            }
+            else if(hitLeft  < 1e30 && stackPtr < 64) { 
+                stack[stackPtr++] = blasOffset + node.left; 
+            }
+            else if(hitRight < 1e30 && stackPtr < 64) { 
+                stack[stackPtr++] = blasOffset + node.right; 
             }
 
-            incomingLight += mat.emission.rgb * mat.emission.a * rayColor;
-        } else {
-            ray.origin = collision.hitPoint + normal * 0.0005;
-
-            vec3 diffuseDir = cosineHemisphereDirection(normal, rng);
-            vec3 specularDir = reflect(ray.direction, normal);
-            ray.direction = mix(diffuseDir, specularDir, mat.smoothness);
-
-            incomingLight += mat.emission.rgb * mat.emission.a * rayColor;
-            rayColor *= mat.color.rgb;
-        }
-
-        //russian roulette
-        float p = max(rayColor.r, max(rayColor.g, rayColor.b));
-        if (i > 2){
-            p = clamp(p, 0.05, 0.95);
-
-            if(randomFloat(rng) > p) break;
-
-            rayColor /= p;
         }
     }
 
-    return incomingLight;
+    return best; // returns smallest distance
 }
 
-uint hash(uint x) {
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = ((x >> 16) ^ x) * 0x45d9f3b;
-    x = (x >> 16) ^ x;
-    return x;
+// world space
+Collision rayTLAS(Ray ray){
+    Hit best;
+    best.distance    = 1e30;
+    best.triangleIdx = 0xFFFFFFFF;
+
+    vec3 invDir = 1.0 / ray.direction;
+
+    for(int i = 0; i < tlasEntries.length(); i++){
+        TLASEntry entry = tlasEntries[i];
+
+        if (rayAABB(invDir, entry.worldMin.xyz, entry.worldMax.xyz, best.distance, ray.origin) >= 1e30)
+            continue;
+
+        // object space distances are directly comparable to world space distances
+        Ray objRay = worldToObject(ray, entry.transformIdx);
+        Hit h = rayBLAS(objRay, entry.blasOffset, entry.triOffset, entry.triCount, best.distance); 
+
+        if (h.triangleIdx != 0xFFFFFFFF && h.distance < best.distance)
+            best = h;
+    }
+
+    if (best.triangleIdx != 0xFFFFFFFF)
+        return resolveHit(ray, best);
+
+    Collision miss;
+    miss.didHit  = 0;
+    miss.distance = 1e30;
+    return miss;
+}
+
+// -- Scene --
+
+Collision raySphere(Ray ray, Sphere s){
+    Collision c;
+    c.didHit = 0;
+
+    vec3 oc = s.pos - ray.origin;
+    
+    float ca = dot(oc, ray.direction); // ca = closest approach
+    if(ca < 0.0) return c;
+
+    float dist2 = dot(oc, oc) - ca * ca;
+    float r2 = s.radius * s.radius;
+    if(dist2 > r2) return c;
+
+    c.distance = ca - sqrt(r2 - dist2);
+    c.didHit = 1;
+    c.hitPoint = ray.origin + ray.direction * c.distance;
+    c.normal = (c.hitPoint - s.pos) / s.radius;
+    c.material = s.material;
+    return c;
+}
+
+Collision calculateRayCollision(Ray ray)
+{
+    Collision best;
+    best.didHit = 0;
+    best.distance = 1e30;
+
+    for(int i = 0; i < spheres.length(); i++){
+        Collision c = raySphere(ray, spheres[i]);
+        if(c.didHit == 1 && c.distance < best.distance)
+            best = c;
+    }
+
+    Collision mesh = rayTLAS(ray);
+    if(mesh.didHit == 1 && mesh.distance < best.distance)
+        best = mesh;
+
+    return best;
+}
+
+vec3 ambient(Ray ray){
+    // skybox when??
+    return vec3(0.0);
+}
+
+// -- Path Tracing --
+
+vec3 trace(Ray ray, inout uint rng){
+    vec3 light = vec3(0.0);
+    vec3 color = vec3(1.0);
+
+    for(int i = 0; i <= int(maxBounce); i++){
+        if(max(color.r, max(color.g, color.b)) < 1e-4) break;
+
+        Collision hit = calculateRayCollision(ray);
+
+        if(hit.didHit == 0){
+            light += ambient(ray);
+            break;
+        }
+
+        Material mat = hit.material;
+        vec3 normal = hit.normal;
+        bool enter = dot(ray.direction, normal) < 0.0;
+        if(!enter) normal = -normal;
+
+        if(mat.transparency > 0.0)
+        {
+            float ior = mat.ior > 0.0 ? mat.ior : 1.5;
+            float eta = enter ? (1.0 / ior) : ior;
+            float cosI = abs(dot(ray.direction, normal));
+            float r0 = pow((1.0 - ior) / (1.0 + ior), 2.0);
+            float fresnel = r0 + (1.0 - r0) * pow(1.0 - cosI, 5.0);
+
+            vec3 refracted = refract(ray.direction, normal, eta);
+            bool tir = dot(refracted, refracted) < 1e-6; // tir = total internal reflection
+
+            light += mat.emission.rgb * mat.emission.a * color;
+
+            if(!tir && randomFloat(rng) < mat.transparency * (1.0 - fresnel)){ 
+                // refract
+                ray.origin = hit.hitPoint - normal * 5e-4;
+                ray.direction = normalize(refracted);
+                if (!enter && hit.distance > 1e-3)
+                    color *= exp(-mat.color * hit.distance);
+            } else {
+                // reflect
+                ray.origin = hit.hitPoint + normal * 5e-4;
+                ray.direction = reflect(ray.direction, normal);
+                color *= mat.color;
+            }
+        } else {
+            light += mat.emission.rgb * mat.emission.a * color;
+
+            ray.origin = hit.hitPoint + normal * 5e-4;
+            ray.direction = mix(cosineHemisphere(normal, rng), reflect(ray.direction, normal), mat.smoothness);
+            
+            color *= mat.color;
+        }
+
+        //russian roulette
+        if (i > 2){
+            float p = clamp(max(color.r, max(color.g, color.b)), 0.05, 0.95);
+            if(randomFloat(rng) > p) break;
+            color /= p;
+        }
+    }
+
+    return light;
 }
 
 void main()
@@ -451,28 +424,26 @@ void main()
     uint rng = hash((pixel.y * uint(resolution.x) + pixel.x) ^ hash(frameIndex));
 
     vec3 forward = normalize(cameraFront);
-    vec3 right   = normalize(cross(forward, vec3(0,1,0)));
+    vec3 right   = normalize(cross(forward, vec3(0, 1, 0)));
     vec3 up      = cross(right, forward);
+    float fovScale = 1.0 / tan(radians(fov) * 0.5);
 
-    
+    vec3 totalLight = vec3(0.0);
 
-    vec3 totalLight = vec3(0);
     for (int i = 0; i < int(numRaysPerPixel); i++) {
-        vec2 uv = vec2(0.0);
-        vec2 jitter = vec2(0.0);
-        if(SSAA == 1)
-            jitter = vec2(randomFloat(rng), randomFloat(rng)) - 0.5;
+        vec2 jitter = (SSAA == 1)
+            ? vec2(randomFloat(rng), randomFloat(rng)) - 0.5
+            : vec2(0.0);
 
-        uv = (vec2(pixel) + 0.5 + jitter) / resolution;
-        vec2 screen = uv - 0.5;
-        screen.x *= resolution.x / resolution.y;
+        vec2 screen = ((vec2(pixel) + 0.5 + jitter) / resolution - 0.5) * vec2(resolution.x / resolution.y, 1.0);
 
         Ray ray;
         ray.origin = cameraPos;
-        ray.direction = normalize(1.0/tan(radians(fov) * .5) * forward + screen.x * right + screen.y * up); //fov correction
+        ray.direction = normalize(fovScale * forward + screen.x * right + screen.y * up);
 
         totalLight += trace(ray, rng);
     }
+
     totalLight /= numRaysPerPixel;
 
     if (frameIndex == 0) {
@@ -480,9 +451,7 @@ void main()
         return;
     }
 
-    vec4 prev = imageLoad(accumImage, ivec2(pixel));
-    float weight = 1.0 / (frameIndex + 1);
-
-    vec3 color = mix(prev.rgb, totalLight, weight);
-    imageStore(accumImage, ivec2(pixel), vec4(color, 1.0));
+    vec3 prev = imageLoad(accumImage, ivec2(pixel)).rgb;
+    vec3 result = mix(prev, totalLight, 1.0 / float(frameIndex + 1));
+    imageStore(accumImage, ivec2(pixel), vec4(result, 1.0));
 }
