@@ -1,6 +1,6 @@
-# 3D-Raytracer
+# Tiny Tracer
 
-_A simple cross-platform C++ 3D Raytracer using OpenGL_
+_A simple, cross-platform path tracer written in C++._
 
 ## Showcase
 
@@ -14,11 +14,10 @@ _A simple cross-platform C++ 3D Raytracer using OpenGL_
 
 ## Features
 
-- Real-time Monte Carlo path tracing.
-- Ability to load .obj model files.
-- Accumulates frames over time for a more realistic picture.
-- Helpful user interface.
-
+- Blazing Speed, including real-time Monte Carlo path tracing.
+- A helpful user interface.
+- The ability to load model files, scene files, and setting configurations.
+- Support for different materials, such as glass.
 
 ## Prerequisites
 

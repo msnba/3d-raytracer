@@ -1,15 +1,15 @@
 #define _USE_MATH_DEFINES
-#include <math.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <math.h>
 #include <vector>
 
-#include "viewport.h"
-#include "object.h"
-#include "gui.h"
-#include "scene.h"
-#include "settings.h"
 #include "raw_sources.h"
+#include "tinytracer/core/gui.h"
+#include "tinytracer/core/viewport.h"
+#include "tinytracer/utils/settings.h"
+#include "tinytracer/world/object.h"
+#include "tinytracer/world/scene.h"
 
 #define SCR_WIDTH 1440
 #define SCR_HEIGHT 1080
@@ -19,67 +19,74 @@
 #define M_PIf static_cast<float>(M_PI)
 #endif
 
-int main()
-{
-    if (!Settings::get().loadFromSource(DEFAULT_SETTINGS, false))
-        throw std::runtime_error("Default settings cannot be loaded.");
+int main() {
+  if (!tinytracer::utils::Settings::get().loadFromSource(DEFAULT_SETTINGS,
+                                                         false))
+    throw std::runtime_error("Default settings cannot be loaded.");
 
-    auto window = std::make_unique<Window>(SCR_WIDTH, SCR_HEIGHT, "Window", false);
-    auto gui = std::make_unique<GUI>(window->window);
-    auto camera = std::make_unique<Camera>(90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
-    auto scene = std::make_shared<Scene>();
+  auto window = std::make_unique<tinytracer::core::Window>(
+      SCR_WIDTH, SCR_HEIGHT, "Window", false);
+  auto gui = std::make_unique<tinytracer::core::GUI>(window->window);
+  auto camera = std::make_unique<tinytracer::world::Camera>(
+      90.0f, 6.0f, 0.0f, -40.0f, glm::vec3(-2, 7, 0));
+  auto scene = std::make_shared<tinytracer::world::Scene>();
 
-    Object::Material dragonMaterial{
-        {1.f, 1.f, 1.f},      // color
-        0.f,                  // smoothness
-        {0.f, 0.f, 0.f, 0.f}, // emission color + strength
-        0,                    // transparency
-        1.5f                  // ior
-    };
+  tinytracer::world::Object::Material dragonMaterial{
+      {1.f, 1.f, 1.f},      // color
+      0.f,                  // smoothness
+      {0.f, 0.f, 0.f, 0.f}, // emission color + strength
+      0,                    // transparency
+      1.5f                  // ior
+  };
 
-    Object::Transform dragonTransform{
-        {5.5f, 1.5f, 0.f}, // position
-        {},                // rotation
-        glm::vec3(4)       // scale
-    };
+  tinytracer::world::Object::Transform dragonTransform{
+      {5.5f, 1.5f, 0.f}, // position
+      {},                // rotation
+      glm::vec3(4)       // scale
+  };
 
-    scene->add(std::make_unique<Mesh>(Mesh("assets/models/dragon.obj", dragonTransform, dragonMaterial)));
-    scene->add(std::make_unique<Cube>(Cube({0, 0, -12.5f}, {0, 0, 0}, 40.f, .5f, 40.f, {{1, 1, 1}, 0.f, {0, 0, 0, 0}, 0, 0})));
+  scene->add(std::make_unique<tinytracer::world::Mesh>(tinytracer::world::Mesh(
+      "assets/models/dragon.obj", dragonTransform, dragonMaterial)));
+  scene->add(std::make_unique<tinytracer::world::Cube>(
+      tinytracer::world::Cube({0, 0, -12.5f}, {0, 0, 0}, 40.f, .5f, 40.f,
+                              {{1, 1, 1}, 0.f, {0, 0, 0, 0}, 0, 0})));
 
-    // scene->meshes.push_back(loadRect({{{5.f, 4.f, -1.f}, {0, 0, 0}, {2, .25f, 2}}, {{0, 0, 0}, 0, {1, 1, 1, 1}, 0, 0, 0, 0}}, *scene));
+  // scene->meshes.push_back(loadRect({{{5.f, 4.f, -1.f}, {0, 0, 0}, {2, .25f,
+  // 2}}, {{0, 0, 0}, 0, {1, 1, 1, 1}, 0, 0, 0, 0}}, *scene));
 
-    { // creates a circle of spheres in a color wheel
-        float sides = 6;
-        float radius = 3.f;
-        float origin[2] = {5.5, 0.0};
-        for (float i = 0; i < sides; i++)
-        {
-            float angle = 2.0f * M_PIf * i / sides + M_PIf / 2.0f;
+  { // creates a circle of spheres in a color wheel
+    float sides = 6;
+    float radius = 3.f;
+    float origin[2] = {5.5, 0.0};
+    for (float i = 0; i < sides; i++) {
+      float angle = 2.0f * M_PIf * i / sides + M_PIf / 2.0f;
 
-            float r = 0.5f + 0.5f * sinf(angle);
-            float g = 0.5f + 0.5f * sinf(angle + 2.0f * M_PIf / 3.0f);
-            float b = 0.5f + 0.5f * sinf(angle + 4.0f * M_PIf / 3.0f);
+      float r = 0.5f + 0.5f * sinf(angle);
+      float g = 0.5f + 0.5f * sinf(angle + 2.0f * M_PIf / 3.0f);
+      float b = 0.5f + 0.5f * sinf(angle + 4.0f * M_PIf / 3.0f);
 
-            // x (up), y, z (right)
-            scene->add(
-                std::make_unique<Sphere>(Sphere(
-                    {radius * sin(angle) + origin[0], 1.5, radius * cos(angle) + origin[1]}, // position
-                    1.0f,                                                                    // radius
-                    {
-                        {0, 0, 0},      // color
-                        0.f,            // smoothness
-                        {r, g, b, 1.f}, // emission
-                        0,              // transparency
-                        0               // ior
-                    })));
-        }
+      // x (up), y, z (right)
+      scene->add(
+          std::make_unique<tinytracer::world::Sphere>(tinytracer::world::Sphere(
+              {radius * sin(angle) + origin[0], 1.5,
+               radius * cos(angle) + origin[1]}, // position
+              1.0f,                              // radius
+              {
+                  {0, 0, 0},      // color
+                  0.f,            // smoothness
+                  {r, g, b, 1.f}, // emission
+                  0,              // transparency
+                  0               // ior
+              })));
     }
+  }
 
-    Viewport viewport(std::move(window), std::move(camera), std::move(gui), scene);
+  tinytracer::core::Viewport viewport(std::move(window), std::move(camera),
+                                      std::move(gui), scene);
 
-    // -- Render Loop --
-    while (!viewport.shouldClose())
-        viewport.update();
+  // -- Render Loop --
+  while (!viewport.shouldClose())
+    viewport.update();
 
-    return 0;
+  return 0;
 }
