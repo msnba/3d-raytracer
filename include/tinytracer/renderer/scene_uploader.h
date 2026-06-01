@@ -66,7 +66,7 @@ struct GPUTLASEntry {
   uint32_t transformIdx;
 };
 
-struct MeshGPUData {
+struct MeshData {
   std::vector<GPUNode> blasNodes;
   std::vector<GPUTriangle> triangles;
   GPUTLASEntry tlasEntry;
@@ -146,22 +146,5 @@ inline RebuildFlags operator&(RebuildFlags a, RebuildFlags b) {
 inline bool hasFlag(RebuildFlags a, RebuildFlags b) {
   return (a & b) != RebuildFlags::None;
 }
-
-GPUSphere convertToGPUObject(const tinytracer::world::Sphere &sphere);
-std::vector<GPUSphere>
-convertToGPUObject(const std::vector<tinytracer::world::Sphere *> &spheres);
-
-MeshGPUData buildMeshGPUData(const tinytracer::world::Mesh &mesh,
-                             uint32_t transformIdx);
-
-PackedSceneGeometry
-packMeshes(const std::vector<tinytracer::world::Mesh *> &meshes);
-
-void rebuildTLAS(std::vector<GPUTLASEntry> &entries,
-                 const std::vector<tinytracer::world::Mesh *> &meshes);
-
-GPUTransform buildGPUTransform(const tinytracer::world::Mesh &mesh);
-std::vector<GPUTransform>
-buildGPUTransforms(const std::vector<tinytracer::world::Mesh *> &meshes);
 
 } // namespace tinytracer::renderer

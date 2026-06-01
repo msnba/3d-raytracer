@@ -44,7 +44,7 @@ private:
 
 class GUI {
 public:
-  GUI() = default;
+  GUI();
   GUI(GLFWwindow *rawWindow);
 
   ~GUI();
@@ -57,6 +57,7 @@ public:
   bool toggleRender();
 
   void setCallbacks(const ViewportCallbacks &callbacks);
+  void attachWindow(GLFWwindow *rawWindow);
 
 private:
   void destroySelf();

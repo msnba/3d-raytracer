@@ -6,6 +6,144 @@
 
 namespace tinytracer::renderer {
 
+static GPUSphere convertToGPUObject(const tinytracer::world::Sphere &sphere) {
+  return GPUSphere{sphere.transform_.position,
+                   sphere.radius_,
+                   sphere.material_.color,
+                   sphere.material_.smoothness,
+                   sphere.material_.emission,
+                   sphere.material_.transparency,
+                   sphere.material_.ior,
+                   0,
+                   0};
+}
+
+static std::vector<GPUSphere>
+convertToGPUObject(const std::vector<tinytracer::world::Sphere *> &spheres) {
+  std::vector<GPUSphere> outSpheres;
+  outSpheres.reserve(spheres.size());
+
+  for (const auto *sphere : spheres)
+    outSpheres.push_back(convertToGPUObject(*sphere));
+
+  return outSpheres;
+}
+
+static GPUTransform buildGPUTransform(const tinytracer::world::Mesh &mesh) {
+  glm::mat4 model = mesh.getMatrix();
+  glm::mat4 inv = glm::inverse(model);
+  return GPUTransform{model, inv, glm::transpose(inv)};
+}
+
+static std::vector<GPUTransform>
+buildGPUTransforms(const std::vector<tinytracer::world::Mesh *> &meshes) {
+  std::vector<GPUTransform> out;
+  out.reserve(meshes.size());
+  for (const auto *mesh : meshes)
+    out.push_back(buildGPUTransform(*mesh));
+  return out;
+}
+
+static void appendMeshData(const tinytracer::world::Mesh &mesh,
+                           uint32_t transformIdx,
+                           std::vector<GPUNode> &blasNodes,
+                           std::vector<GPUTriangle> &triangles,
+                           std::vector<GPUTLASEntry> &tlasEntries) {
+  std::vector<GPUTriangle> meshTris;
+  meshTris.reserve(mesh.indices_.size() / 3);
+
+  // object space triangles
+  for (size_t i = 0; i + 2 < mesh.indices_.size(); i += 3) {
+    GPUTriangle tri{};
+    tri.a = mesh.vertices_[static_cast<size_t>(mesh.indices_[i].vertex_index)];
+    tri.b =
+        mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 1].vertex_index)];
+    tri.c =
+        mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 2].vertex_index)];
+    tri.materialIdx = mesh.materialIdx_;
+    tri.transformIdx = transformIdx;
+    meshTris.push_back(tri);
+  }
+
+  // blas in object space
+  tinytracer::geometry::BVH blas(meshTris);
+
+  GPUTLASEntry tlasEntry{};
+  tlasEntry.blasOffset = static_cast<uint32_t>(blasNodes.size());
+  tlasEntry.triOffset = static_cast<uint32_t>(triangles.size());
+  tlasEntry.triCount = static_cast<uint32_t>(blas.triangles_.size());
+  tlasEntry.transformIdx = transformIdx;
+
+  // world space aabb
+  // transform the 8 object-space corners
+  glm::mat4 model = mesh.getMatrix();
+  glm::vec3 corners[8] = {
+      mesh.minBounds_,
+      {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
+      {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+      {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+      {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
+      {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+      {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+      mesh.maxBounds_};
+
+  glm::vec3 worldMin(std::numeric_limits<float>::max());
+  glm::vec3 worldMax(-std::numeric_limits<float>::max());
+  for (const glm::vec3 &c : corners) {
+    glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
+    worldMin = glm::min(worldMin, wc);
+    worldMax = glm::max(worldMax, wc);
+  }
+  tlasEntry.worldMin = glm::vec4(worldMin, 0.0f);
+  tlasEntry.worldMax = glm::vec4(worldMax, 0.0f);
+
+  blasNodes.insert(blasNodes.end(), blas.nodes_.begin(), blas.nodes_.end());
+  triangles.insert(triangles.end(), blas.triangles_.begin(),
+                   blas.triangles_.end());
+  tlasEntries.push_back(tlasEntry);
+}
+
+static void packMeshes(const std::vector<tinytracer::world::Mesh *> &meshes,
+                       std::vector<GPUNode> &blasNodes,
+                       std::vector<GPUTriangle> &triangles,
+                       std::vector<GPUTLASEntry> &tlasEntries) {
+  for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++)
+    appendMeshData(*meshes[i], i, blasNodes, triangles, tlasEntries);
+}
+
+static void rebuildTLAS(std::vector<GPUTLASEntry> &entries,
+                        const std::vector<tinytracer::world::Mesh *> &meshes) {
+  // Only recomputes world-space AABBs and transformIdx.
+  // BLAS offsets and tri offsets are unchanged — don't touch them.
+  for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++) {
+    const auto &mesh = *meshes[i];
+    GPUTLASEntry &entry = entries[i];
+
+    entry.transformIdx = i;
+
+    glm::mat4 model = mesh.getMatrix();
+    glm::vec3 corners[8] = {
+        mesh.minBounds_,
+        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
+        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+        {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
+        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
+        {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
+        mesh.maxBounds_};
+
+    glm::vec3 worldMin(std::numeric_limits<float>::max());
+    glm::vec3 worldMax(-std::numeric_limits<float>::max());
+    for (const glm::vec3 &c : corners) {
+      glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
+      worldMin = glm::min(worldMin, wc);
+      worldMax = glm::max(worldMax, wc);
+    }
+    entry.worldMin = glm::vec4(worldMin, 0.0f);
+    entry.worldMax = glm::vec4(worldMax, 0.0f);
+  }
+}
+
 SceneUploader::~SceneUploader() {
   if (sphereSSBO_)
     glDeleteBuffers(1, &sphereSSBO_);
@@ -30,18 +168,14 @@ void SceneUploader::upload(const tinytracer::world::Scene &scene,
 
   tinytracer::utils::info("rebuilt scene");
   if (hasFlag(flags, RebuildFlags::Spheres)) {
-    std::vector<Sphere *> spheres = scene.getObjectsOfType<Sphere>();
-    std::vector<GPUSphere> gpuSpheres;
-    gpuSpheres.reserve(spheres.size());
-    for (Sphere *s : spheres)
-      gpuSpheres.push_back(convertToGPUObject(*s));
+    std::vector<GPUSphere> gpuSpheres =
+        convertToGPUObject(scene.getObjectsOfType<Sphere>());
 
     uploadBuffer(sphereSSBO_, SLOT_SPHERES_, gpuSpheres.data(),
                  gpuSpheres.size() * sizeof(GPUSphere));
   }
 
   if (hasFlag(flags, RebuildFlags::Materials)) {
-    // std::vector<Object::Material *> &materials = pScene->materials_;
     std::vector<GPUMaterial> gpuMaterials;
     gpuMaterials.reserve(scene.materials_.size());
     for (Object::Material *m : scene.materials_)
@@ -54,13 +188,15 @@ void SceneUploader::upload(const tinytracer::world::Scene &scene,
 
   if (hasFlag(flags, RebuildFlags::Geometry)) {
     std::vector<Mesh *> meshes = scene.getObjectsOfType<Mesh>();
-    PackedSceneGeometry packed = packMeshes(meshes);
+    std::vector<GPUNode> blasNodes;
+    std::vector<GPUTriangle> triangles;
 
-    cachedTLASEntries_ = packed.tlasEntries;
+    cachedTLASEntries_.clear();
+    packMeshes(meshes, blasNodes, triangles, cachedTLASEntries_);
 
-    uploadBuffer(triSSBO_, SLOT_TRIANGLES_, packed.triangles);
-    uploadBuffer(blasSSBO_, SLOT_BLAS_, packed.blasNodes);
-    uploadBuffer(tlasSSBO_, SLOT_TLAS_, packed.tlasEntries);
+    uploadBuffer(triSSBO_, SLOT_TRIANGLES_, triangles);
+    uploadBuffer(blasSSBO_, SLOT_BLAS_, blasNodes);
+    uploadBuffer(tlasSSBO_, SLOT_TLAS_, cachedTLASEntries_);
 
     std::vector<GPUTransform> transforms = buildGPUTransforms(meshes);
     uploadBuffer(transformSSBO_, SLOT_TRANSFORMS_, transforms);
@@ -141,155 +277,6 @@ void SceneUploader::bindAll() const {
   if (transformSSBO_)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, SLOT_TRANSFORMS_,
                      transformSSBO_);
-}
-
-GPUSphere convertToGPUObject(const tinytracer::world::Sphere &sphere) {
-  return GPUSphere{sphere.transform_.position,
-                   sphere.radius_,
-                   sphere.material_.color,
-                   sphere.material_.smoothness,
-                   sphere.material_.emission,
-                   sphere.material_.transparency,
-                   sphere.material_.ior,
-                   0,
-                   0};
-}
-
-std::vector<GPUSphere>
-convertToGPUObject(const std::vector<tinytracer::world::Sphere *> &spheres) {
-  std::vector<GPUSphere> outSpheres;
-  outSpheres.reserve(spheres.size());
-
-  for (const auto *sphere : spheres)
-    outSpheres.push_back(convertToGPUObject(*sphere));
-
-  return outSpheres;
-}
-
-MeshGPUData buildMeshGPUData(const tinytracer::world::Mesh &mesh,
-                             uint32_t transformIdx) {
-  MeshGPUData out;
-
-  // Build object-space triangles — no model matrix applied.
-  for (size_t i = 0; i + 2 < mesh.indices_.size(); i += 3) {
-    GPUTriangle tri{};
-    tri.a = mesh.vertices_[static_cast<size_t>(mesh.indices_[i].vertex_index)];
-    tri.b =
-        mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 1].vertex_index)];
-    tri.c =
-        mesh.vertices_[static_cast<size_t>(mesh.indices_[i + 2].vertex_index)];
-    tri.materialIdx = mesh.materialIdx_;
-    tri.transformIdx = transformIdx;
-    out.triangles.push_back(tri);
-  }
-
-  // Build BLAS in object space.
-  tinytracer::geometry::BVH blas(out.triangles);
-  out.blasNodes = blas.nodes_;
-  out.triangles =
-      blas.triangles_; // BVH reorders triangles, take the reordered copy
-
-  // Populate TLAS entry — offsets are filled in by packMeshes().
-  out.tlasEntry.blasOffset = 0; // filled later
-  out.tlasEntry.triOffset = 0;  // filled later
-  out.tlasEntry.triCount = static_cast<uint32_t>(out.triangles.size());
-  out.tlasEntry.transformIdx = transformIdx;
-
-  // World-space AABB — transform the 8 object-space corners.
-  glm::mat4 model = mesh.getMatrix();
-  glm::vec3 corners[8] = {
-      mesh.minBounds_,
-      {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
-      {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-      {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-      {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
-      {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-      {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-      mesh.maxBounds_};
-
-  glm::vec3 worldMin(std::numeric_limits<float>::max());
-  glm::vec3 worldMax(-std::numeric_limits<float>::max());
-  for (const glm::vec3 &c : corners) {
-    glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
-    worldMin = glm::min(worldMin, wc);
-    worldMax = glm::max(worldMax, wc);
-  }
-  out.tlasEntry.worldMin = glm::vec4(worldMin, 0.0f);
-  out.tlasEntry.worldMax = glm::vec4(worldMax, 0.0f);
-
-  return out;
-}
-
-PackedSceneGeometry
-packMeshes(const std::vector<tinytracer::world::Mesh *> &meshes) {
-  PackedSceneGeometry packed;
-  uint32_t blasOffset = 0;
-  uint32_t triOffset = 0;
-
-  for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++) {
-    MeshGPUData data = buildMeshGPUData(*meshes[i], i);
-
-    data.tlasEntry.blasOffset = blasOffset;
-    data.tlasEntry.triOffset = triOffset;
-
-    blasOffset += static_cast<uint32_t>(data.blasNodes.size());
-    triOffset += static_cast<uint32_t>(data.triangles.size());
-
-    packed.blasNodes.insert(packed.blasNodes.end(), data.blasNodes.begin(),
-                            data.blasNodes.end());
-    packed.triangles.insert(packed.triangles.end(), data.triangles.begin(),
-                            data.triangles.end());
-    packed.tlasEntries.push_back(data.tlasEntry);
-  }
-
-  return packed;
-}
-
-void rebuildTLAS(std::vector<GPUTLASEntry> &entries,
-                 const std::vector<tinytracer::world::Mesh *> &meshes) {
-  // Only recomputes world-space AABBs and transformIdx.
-  // BLAS offsets and tri offsets are unchanged — don't touch them.
-  for (uint32_t i = 0; i < static_cast<uint32_t>(meshes.size()); i++) {
-    const auto &mesh = *meshes[i];
-    GPUTLASEntry &entry = entries[i];
-
-    entry.transformIdx = i;
-
-    glm::mat4 model = mesh.getMatrix();
-    glm::vec3 corners[8] = {
-        mesh.minBounds_,
-        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.minBounds_.z},
-        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-        {mesh.minBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-        {mesh.minBounds_.x, mesh.maxBounds_.y, mesh.maxBounds_.z},
-        {mesh.maxBounds_.x, mesh.minBounds_.y, mesh.maxBounds_.z},
-        {mesh.maxBounds_.x, mesh.maxBounds_.y, mesh.minBounds_.z},
-        mesh.maxBounds_};
-
-    glm::vec3 worldMin(std::numeric_limits<float>::max());
-    glm::vec3 worldMax(-std::numeric_limits<float>::max());
-    for (const glm::vec3 &c : corners) {
-      glm::vec3 wc = glm::vec3(model * glm::vec4(c, 1.0f));
-      worldMin = glm::min(worldMin, wc);
-      worldMax = glm::max(worldMax, wc);
-    }
-    entry.worldMin = glm::vec4(worldMin, 0.0f);
-    entry.worldMax = glm::vec4(worldMax, 0.0f);
-  }
-}
-
-GPUTransform buildGPUTransform(const tinytracer::world::Mesh &mesh) {
-  glm::mat4 model = mesh.getMatrix();
-  glm::mat4 inv = glm::inverse(model);
-  return GPUTransform{model, inv, glm::transpose(inv)};
-}
-std::vector<GPUTransform>
-buildGPUTransforms(const std::vector<tinytracer::world::Mesh *> &meshes) {
-  std::vector<GPUTransform> out;
-  out.reserve(meshes.size());
-  for (const auto *mesh : meshes)
-    out.push_back(buildGPUTransform(*mesh));
-  return out;
 }
 
 } // namespace tinytracer::renderer

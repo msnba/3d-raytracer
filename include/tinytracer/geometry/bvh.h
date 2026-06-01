@@ -9,8 +9,8 @@ namespace tinytracer::geometry {
 
 class BVH {
 public:
-  static constexpr int BVH_MAX_DEPTH = 20;
-  static constexpr int BVH_LEAF_TRIANGLES = 6;
+  static constexpr int BVH_MAX_DEPTH = 32;
+  static constexpr int BVH_LEAF_TRIANGLES = 4;
   static constexpr int SAH_NUM_BINS = 12;
 
   std::vector<tinytracer::renderer::GPUNode> nodes_;

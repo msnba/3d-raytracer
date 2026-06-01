@@ -28,10 +28,11 @@ namespace tinytracer::core {
 Viewport::Viewport(std::unique_ptr<tinytracer::core::Window> window,
                    std::unique_ptr<tinytracer::world::Camera> camera,
                    std::unique_ptr<GUI> gui,
-                   std::weak_ptr<tinytracer::world::Scene> scene)
+                   std::unique_ptr<tinytracer::world::Scene> scene)
     : window_(std::move(window)), camera_(std::move(camera)),
-      gui_(std::move(gui)), scene_(scene), rawWindow_(window_->window),
-      passthrough_(PASS_VERT, PASS_FRAG), raytrace_(RAYTRACER_COMP) {
+      gui_(std::move(gui)), scene_(std::move(scene)),
+      rawWindow_(window_->window), passthrough_(PASS_VERT, PASS_FRAG),
+      raytrace_(RAYTRACER_COMP) {
   if (!window_) {
     glfwTerminate();
     throw std::runtime_error("Viewport created without a valid window.");
@@ -59,39 +60,33 @@ Viewport::Viewport(std::unique_ptr<tinytracer::core::Window> window,
   ViewportCallbacks callbacks{};
 
   callbacks.set("maxBounceChanged", [this](uint32_t maxBounce) {
-    if (auto pScene = scene_.lock()) {
-      auto s = pScene->settings();
-      s.maxBounce = maxBounce;
-      pScene->setSettings(s);
+    auto s = scene_->settings();
+    s.maxBounce = maxBounce;
+    scene_->setSettings(s);
 
-      sceneUploader_.upload(*pScene,
-                            tinytracer::renderer::RebuildFlags::SceneData);
-      accumFrameIndex_ = 0;
-    };
+    sceneUploader_.upload(*scene_,
+                          tinytracer::renderer::RebuildFlags::SceneData);
+    accumFrameIndex_ = 0;
   });
 
   callbacks.set("raysPerPixelChanged", [this](uint32_t numRaysPerPixel) {
-    if (auto pScene = scene_.lock()) {
-      auto s = pScene->settings();
-      s.numRaysPerPixel = numRaysPerPixel;
-      pScene->setSettings(s);
+    auto s = scene_->settings();
+    s.numRaysPerPixel = numRaysPerPixel;
+    scene_->setSettings(s);
 
-      sceneUploader_.upload(*pScene,
-                            tinytracer::renderer::RebuildFlags::SceneData);
-      accumFrameIndex_ = 0;
-    };
+    sceneUploader_.upload(*scene_,
+                          tinytracer::renderer::RebuildFlags::SceneData);
+    accumFrameIndex_ = 0;
   });
 
   callbacks.set("SSAAChanged", [this](bool isSSAAEnabled) {
-    if (auto pScene = scene_.lock()) {
-      auto s = pScene->settings();
-      s.isSSAAEnabled = isSSAAEnabled ? 1u : 0u;
-      pScene->setSettings(s);
+    auto s = scene_->settings();
+    s.isSSAAEnabled = isSSAAEnabled ? 1u : 0u;
+    scene_->setSettings(s);
 
-      sceneUploader_.upload(*pScene,
-                            tinytracer::renderer::RebuildFlags::SceneData);
-      accumFrameIndex_ = 0;
-    };
+    sceneUploader_.upload(*scene_,
+                          tinytracer::renderer::RebuildFlags::SceneData);
+    accumFrameIndex_ = 0;
   });
   callbacks.set("screenshot", [this]() { isScreenshot_ = true; });
 
@@ -107,19 +102,16 @@ Viewport::Viewport(std::unique_ptr<tinytracer::core::Window> window,
   });
 
   callbacks.set("sceneLoaded", [this](std::string destination) {
-    if (auto scene = scene_.lock())
-      if (scene->loadFromFile(destination, true))
-        pendingRebuild_ =
-            pendingRebuild_ | tinytracer::renderer::RebuildFlags::All;
+    if (scene_->loadFromFile(destination, true))
+      pendingRebuild_ =
+          pendingRebuild_ | tinytracer::renderer::RebuildFlags::All;
   });
 
   callbacks.set("sceneSaved", [this](std::optional<std::string> destination) {
-    if (auto scene = scene_.lock()) {
-      if (destination)
-        scene->saveToFile(*destination);
-      else
-        scene->saveToFile();
-    }
+    if (destination)
+      scene_->saveToFile(*destination);
+    else
+      scene_->saveToFile();
   });
 
   // setup for future gizmo
@@ -128,13 +120,10 @@ Viewport::Viewport(std::unique_ptr<tinytracer::core::Window> window,
         pendingRebuild_ | tinytracer::renderer::RebuildFlags::Transforms;
   });
 
+  gui_->attachWindow(rawWindow_);
   gui_->setCallbacks(callbacks);
 
-  auto pScene = scene_.lock();
-  if (!pScene)
-    throw std::runtime_error("No scene during viewport construction.");
-
-  sceneUploader_.upload(*pScene, tinytracer::renderer::RebuildFlags::All);
+  sceneUploader_.upload(*scene_, tinytracer::renderer::RebuildFlags::All);
   rebuildAccumTexture();
 
   isAccumulationEnabled_ = tinytracer::utils::Settings::get().getValue(
@@ -152,17 +141,8 @@ void Viewport::update() {
   deltaTime_ = currentFrame - lastFrame_;
   lastFrame_ = currentFrame;
 
-  static int ticker = 0;
-  if (auto scene = scene_.lock(); scene && ticker < 50) {
-    scene->objects_[0]->transform_.position += glm::vec3(0, 0.01, 0);
-    pendingRebuild_ =
-        pendingRebuild_ | tinytracer::renderer::RebuildFlags::Transforms;
-    ticker++;
-  }
-
   if (pendingRebuild_ != tinytracer::renderer::RebuildFlags::None) {
-    if (auto scene = scene_.lock())
-      sceneUploader_.upload(*scene, pendingRebuild_);
+    sceneUploader_.upload(*scene_, pendingRebuild_);
     pendingRebuild_ = tinytracer::renderer::RebuildFlags::None;
     accumFrameIndex_ = 0;
   }

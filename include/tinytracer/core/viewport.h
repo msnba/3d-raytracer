@@ -17,7 +17,7 @@ public:
   Viewport(std::unique_ptr<Window> window,
            std::unique_ptr<tinytracer::world::Camera> camera,
            std::unique_ptr<GUI> gui,
-           std::weak_ptr<tinytracer::world::Scene> scene);
+           std::unique_ptr<tinytracer::world::Scene> scene);
   ~Viewport();
 
   Viewport(const Viewport &) = delete;
@@ -44,7 +44,7 @@ private:
   std::unique_ptr<Window> window_;
   std::unique_ptr<tinytracer::world::Camera> camera_;
   std::unique_ptr<GUI> gui_;
-  std::weak_ptr<tinytracer::world::Scene> scene_;
+  std::unique_ptr<tinytracer::world::Scene> scene_;
   GLFWwindow *rawWindow_ = nullptr;
 
   tinytracer::renderer::Shader passthrough_;

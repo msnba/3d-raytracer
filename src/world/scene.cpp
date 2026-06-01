@@ -166,6 +166,7 @@ bool Scene::loadFromFile(std::string &filePath, bool saveLast) {
   currentFile_ = filePath;
   return loadFromSource(json.c_str(), false);
 }
+
 bool Scene::loadFromSource(const char *source, bool saveLast) {
   if (saveLast)
     saveToFile();

@@ -14,33 +14,21 @@
 
 namespace tinytracer::core {
 
-GUI::GUI(GLFWwindow *rawWindow) : rawWindow_(rawWindow) {
+GUI::GUI() {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
-
   ImGuiIO &io = ImGui::GetIO();
 
-  ImGui_ImplGlfw_InitForOpenGL(rawWindow, true);
-  ImGui_ImplOpenGL3_Init("#version 430");
-
-  io.IniFilename = nullptr; // Disables ini saving beside the executable
+  io.IniFilename = nullptr;
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
-  int w, h;
-  glfwGetFramebufferSize(rawWindow_, &w, &h);
-  guiScale_ = static_cast<float>(h) / 1080.0f *
-              tinytracer::utils::Settings::get().getValue("guiScale", 1.0f);
+  ImGui::StyleColorsDark();
 
   ImFontConfig cfg;
-  cfg.SizePixels = 13.0f * guiScale_; // default imgui font size
+  cfg.SizePixels = 13.0f;
   io.Fonts->AddFontDefault(&cfg);
-  currentFont_ = nullptr;
-
-  ImGui::GetStyle().ScaleAllSizes(guiScale_);
-  io.FontGlobalScale = 1.0f;
-
-  ImGui::StyleColorsDark();
 }
+
+GUI::GUI(GLFWwindow *rawWindow) : GUI() { attachWindow(rawWindow); }
 
 GUI::~GUI() { destroySelf(); }
 
@@ -62,7 +50,7 @@ GUI &GUI::operator=(GUI &&other) {
 }
 
 void GUI::render(const ViewportData &data) {
-  if (!renderGui_)
+  if (!renderGui_ || !rawWindow_)
     return;
 
   auto &s = tinytracer::utils::Settings::get();
@@ -307,6 +295,33 @@ bool GUI::toggleRender() {
 
 void GUI::setCallbacks(const ViewportCallbacks &callbacks) {
   callbacks_ = callbacks;
+}
+
+void GUI::attachWindow(GLFWwindow *rawWindow) {
+  if (!rawWindow)
+    return;
+
+  if (rawWindow_) {
+    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplOpenGL3_Shutdown();
+  }
+
+  rawWindow_ = rawWindow;
+
+  ImGui_ImplGlfw_InitForOpenGL(rawWindow_, true);
+  ImGui_ImplOpenGL3_Init("#version 430");
+
+  int w, h;
+  glfwGetFramebufferSize(rawWindow_, &w, &h);
+  guiScale_ = static_cast<float>(h) / 1080.0f *
+              tinytracer::utils::Settings::get().getValue("guiScale", 1.0f);
+
+  ImGuiIO &io = ImGui::GetIO();
+  io.FontGlobalScale = guiScale_;
+
+  ImGui::GetStyle() = ImGuiStyle();
+  ImGui::StyleColorsDark();
+  ImGui::GetStyle().ScaleAllSizes(guiScale_);
 }
 
 void GUI::destroySelf() {
