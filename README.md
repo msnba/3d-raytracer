@@ -1,6 +1,6 @@
 # Tiny Tracer
 
-_A simple, cross-platform path tracer written in C++._
+_A simple, cross-platform path tracer written in C++ and OpenGL._
 
 ## Showcase
 
@@ -13,13 +13,12 @@ _A simple, cross-platform path tracer written in C++._
 </p>
 
 ## Features
-
-- Blazing Speed, including real-time Monte Carlo path tracing.
+- Real-time Monte Carlo path tracing.
 - A helpful user interface.
-- The ability to load model files, scene files, and setting configurations.
-- Support for different materials, such as glass.
+- Ability to load model files, scene files, and setting configurations.
+- Support for different materials and object properties, such as glass.
 
-## Prerequisites
+## Building Prerequisites
 
 - [A C++ Compiler](https://code.visualstudio.com/docs/languages/cpp#_install-a-compiler)
 - [CMake](https://cmake.org)
@@ -27,7 +26,7 @@ _A simple, cross-platform path tracer written in C++._
 - [Ninja](https://ninja-build.org/) (optional but recommended)
 - A graphics card supporting OpenGL 4.3+.
 
-#### Linux (Fedora)
+#### Linux (Fedora / Red Hat)
 ```bash
 sudo dnf install cmake ninja-build gcc gcc-c++ pkgconf-pkg-config \
                  libX11-devel libXrandr-devel libXinerama-devel \
@@ -44,7 +43,7 @@ sudo apt install cmake ninja-build build-essential pkg-config \
                  autoconf automake autoconf-archive
 ```
 
-#### Windows (Visual Studio)
+#### Windows (Visual Studio / MSVC)
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) - include *Desktop Development with C++*.
   - Located at the bottom of the page in the *Tools for Visual Studio* section.
 - Make sure to include vcpkg and CMake in the components.
