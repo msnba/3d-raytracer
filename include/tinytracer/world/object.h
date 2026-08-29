@@ -28,8 +28,8 @@ public:
   } material_;
 
   Object() = default;
-  Object(Transform transform, Material material)
-      : transform_(transform), material_(material) {}
+  Object(Transform transform, Material material, std::string name)
+      : transform_(transform), material_(material), name_(name) {}
   virtual ~Object() = default; // makes dynamic casting work
 
   virtual std::string typeName() const = 0;
@@ -53,28 +53,31 @@ public:
 
   uint32_t materialIdx_ = 0;
   uint32_t transformIdx_ = 0;
+
+  std::string name_;
 };
 
 class Sphere : public Object {
 public:
   Sphere() = default;
-  Sphere(glm::vec3 position, float radius, Material material)
-      : Object({position, {0, 0, 0}, glm::vec3(radius)}, material),
-        radius_(radius) {}
+  Sphere(glm::vec3 position, float radius, Material material, std::string name)
+      : Object({position, {0, 0, 0}, glm::vec3(radius)}, material, name) {}
 
   std::string typeName() const override { return "sphere"; };
 
-  float radius_;
+  float radius() const { return transform_.scale.x; };
 };
 
 class Mesh : public Object {
 public:
   Mesh() = default;
-  Mesh(Transform transform, Material material,
+  Mesh(Transform transform, Material material, std::string name,
        std::vector<tinyobj::index_t> indices, std::vector<glm::vec3> vertices)
-      : Object(transform, material), indices_(indices), vertices_(vertices) {}
-  Mesh(const std::string &path, Transform transform, Material material)
-      : Object(transform, material), path_(path) {
+      : Object(transform, material, name), indices_(indices),
+        vertices_(vertices) {}
+  Mesh(const std::string &path, Transform transform, Material material,
+       std::string name)
+      : Object(transform, material, name), path_(path) {
     loadMeshFromPath(path);
   }
 
@@ -94,9 +97,9 @@ class Cube : public Mesh {
 public:
   Cube() = default;
   Cube(glm::vec3 position, glm::vec3 rotation, float width, float height,
-       float length, Material material)
+       float length, Material material, std::string name)
       : Mesh({position, rotation, glm::vec3(width, height, length)}, material,
-             {}, {}) {
+             name, {}, {}) {
     // cube generation
 
     vertices_ = {

@@ -12,6 +12,13 @@ public:
          const bool fullscreen);
   ~Window();
 
+  Window(const Window &) = delete;
+  Window &operator=(const Window &) = delete;
+
+  Window(Window &&other);
+  Window &operator=(Window &&other);
+
+  static std::pair<int, int> getMaximizedSize();
   void toggleFullscreen();
 
 private:

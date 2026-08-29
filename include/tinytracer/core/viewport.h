@@ -39,7 +39,7 @@ private:
   static void scrollCallback(GLFWwindow *window, double xoffset,
                              double yoffset);
 
-  std::string getFPS();
+  float smoothFPS();
 
   std::unique_ptr<Window> window_;
   std::unique_ptr<tinytracer::world::Camera> camera_;
@@ -60,11 +60,8 @@ private:
   uint32_t accumFrameIndex_ = 0;
   float deltaTime_ = 0.0f;
   float lastFrame_ = 0.0f;
-  int fpsFrameCount_ = 0;
   float lastFPS_ = 0.0f;
-  float fpsTimer_ = 0.0f;
   const float fpsInterval_ = 0.5f;
-  std::string fpsString_;
 
   float mouseLastX_ = 0.0f;
   float mouseLastY_ = 0.0f;

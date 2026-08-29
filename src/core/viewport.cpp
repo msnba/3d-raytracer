@@ -114,11 +114,21 @@ Viewport::Viewport(std::unique_ptr<tinytracer::core::Window> window,
       scene_->saveToFile();
   });
 
+  callbacks.set(
+      "sceneDataChanged", [this](tinytracer::world::Scene::Settings s) {
+        scene_->setSettings(s);
+        pendingRebuild_ =
+            pendingRebuild_ | tinytracer::renderer::RebuildFlags::SceneData;
+      });
+
   // setup for future gizmo
-  callbacks.set("objectTransformChanged", [this]() {
-    pendingRebuild_ =
-        pendingRebuild_ | tinytracer::renderer::RebuildFlags::Transforms;
-  });
+  callbacks.set("objectTransformChanged",
+                [this](int index, tinytracer::world::Object::Transform t) {
+                  scene_->objects()[static_cast<size_t>(index)]->transform_ = t;
+                  pendingRebuild_ =
+                      pendingRebuild_ |
+                      tinytracer::renderer::RebuildFlags::Transforms;
+                });
 
   gui_->attachWindow(rawWindow_);
   gui_->setCallbacks(callbacks);
@@ -196,9 +206,15 @@ void Viewport::processGui() {
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
-  gui_->render({.accumFrameIndex = accumFrameIndex_,
-                .fpsString = getFPS(),
-                .fov = camera_->fov_});
+  ViewportData data{};
+
+  data.accumFrameIndex = accumFrameIndex_;
+  data.rawFps = 1.0f / deltaTime_;
+  data.smoothFps = smoothFPS();
+  data.fov = camera_->fov_;
+  data.scene = (scene_ && scene_->objectCount() > 0) ? scene_.get() : nullptr;
+
+  gui_->render(data);
 }
 
 void Viewport::rebuildAccumTexture() {
@@ -220,19 +236,22 @@ void Viewport::rebuildAccumTexture() {
 
 bool Viewport::shouldClose() const { return glfwWindowShouldClose(rawWindow_); }
 
-std::string Viewport::getFPS() {
+float Viewport::smoothFPS() {
+  static float fpsTimer_ = 0.0f;
+  static int fpsFrameCount_ = 0;
+  static float smoothFps = 0.0f;
+
   fpsTimer_ += deltaTime_;
   fpsFrameCount_++;
 
   if (fpsTimer_ >= fpsInterval_) {
-    fpsString_ = "FPS: " + std::to_string(static_cast<int>(
-                               static_cast<float>(fpsFrameCount_) / fpsTimer_));
+    smoothFps = static_cast<float>(fpsFrameCount_) / fpsTimer_;
 
     fpsTimer_ = 0.0f;
     fpsFrameCount_ = 0;
   }
 
-  return fpsString_;
+  return smoothFps;
 }
 
 void Viewport::saveScreenshot() {

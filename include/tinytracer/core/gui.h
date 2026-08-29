@@ -12,17 +12,19 @@
 #include <imgui.h>
 
 #include "tinytracer/core/window.h"
+#include "tinytracer/world/object.h"
+#include "tinytracer/world/scene.h"
 
 using SettingValue = std::variant<int, float, bool, std::string>;
 
 namespace tinytracer::core {
 
-//  TODO: refactor viewport data
 struct ViewportData {
   uint32_t accumFrameIndex = 0;
-  const float fpsInterval = 0.5f;
-  std::string fpsString;
+  float rawFps = 0.0f;
+  float smoothFps = 0.0f;
   float fov = 90.0f;
+  const tinytracer::world::Scene *scene = nullptr;
 };
 
 struct ViewportCallbacks {
@@ -32,10 +34,9 @@ struct ViewportCallbacks {
   }
 
   template <typename Fn> std::function<Fn> *get(const std::string &name) {
-    auto it = callbacks.find(name);
-    if (it == callbacks.end())
-      return nullptr;
-    return std::any_cast<std::function<Fn>>(&it->second);
+    if (auto it = callbacks.find(name); it != callbacks.end())
+      return std::any_cast<std::function<Fn>>(&it->second);
+    return nullptr;
   }
 
 private:
@@ -60,7 +61,9 @@ public:
   void attachWindow(GLFWwindow *rawWindow);
 
 private:
+  void renderMenuBar(float menuBarHeight);
   void destroySelf();
+  void rebuildFontAtlas(float scale);
 
   GLFWwindow *rawWindow_ = nullptr;
   ViewportCallbacks callbacks_{};
@@ -69,6 +72,8 @@ private:
   float guiScale_ = 1.0f;
   bool renderGui_ = true;
   bool showTopBar_ = true;
+
+  int selectedObjectIndex_ = -1;
 };
 
 } // namespace tinytracer::core

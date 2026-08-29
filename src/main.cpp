@@ -11,9 +11,6 @@
 #include "tinytracer/world/object.h"
 #include "tinytracer/world/scene.h"
 
-#define SCR_WIDTH 1440
-#define SCR_HEIGHT 1080
-
 // MSVC fix
 #ifndef M_PIf
 #define M_PIf static_cast<float>(M_PI)
@@ -24,9 +21,10 @@ int main() {
                                                          false))
     throw std::runtime_error("Default settings cannot be loaded.");
 
+  auto [w, h] = tinytracer::core::Window::getMaximizedSize();
+
   tinytracer::core::Viewport viewport(
-      std::make_unique<tinytracer::core::Window>(SCR_WIDTH, SCR_HEIGHT,
-                                                 "Window", false),
+      std::make_unique<tinytracer::core::Window>(w, h, "Window", false),
       std::make_unique<tinytracer::world::Camera>(90.0f, 6.0f, 0.0f, -40.0f,
                                                   glm::vec3(-2, 7, 0)),
       std::make_unique<tinytracer::core::GUI>(),

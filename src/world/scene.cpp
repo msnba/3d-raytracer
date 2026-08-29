@@ -106,40 +106,49 @@ static const std::unordered_map<std::string, ObjectIO> &registry() {
           auto obj = std::make_unique<Sphere>();
           obj->transform_ = readTransform(val);
           obj->material_ = readMaterial(val);
-          if (val.HasMember("radius") && val["radius"].IsFloat())
-            obj->radius_ = val["radius"].GetFloat();
+          if (val.HasMember("name") && val["name"].IsString())
+            obj->name_ = val["name"].GetString();
           return obj;
         },
         [](Writer &w, const Object *obj) {
           const Sphere *s = static_cast<const Sphere *>(obj);
           writeTransform(w, s->transform_);
           writeMaterial(w, s->material_);
-          w.Key("radius");
-          w.Double(s->radius_);
+          w.Key("name");
+          w.String(s->name_.c_str());
         }}},
       {"cube",
        {[](const rapidjson::Value &val) -> std::unique_ptr<Object> {
           glm::vec3 pos(0), rot(0), scale(1);
+          std::string name;
           if (val.HasMember("position") && val["position"].IsArray())
             pos = readVec3(val["position"]);
           if (val.HasMember("rotation") && val["rotation"].IsArray())
             rot = readVec3(val["rotation"]);
           if (val.HasMember("scale") && val["scale"].IsArray())
             scale = readVec3(val["scale"]);
+          if (val.HasMember("name") && val["name"].IsString())
+            name = val["name"].GetString();
           return std::make_unique<Cube>(pos, rot, scale.x, scale.y, scale.z,
-                                        readMaterial(val));
+                                        readMaterial(val), name);
         },
         [](Writer &w, const Object *obj) {
           writeTransform(w, obj->transform_);
           writeMaterial(w, obj->material_);
+          w.Key("name");
+          w.String(obj->name_.c_str());
         }}},
       {"mesh",
        {[](const rapidjson::Value &val) -> std::unique_ptr<Object> {
+          std::string name;
           if (!val.HasMember("path") || !val["path"].IsString() ||
               val["path"].GetStringLength() == 0)
             return nullptr;
+          if (val.HasMember("name") && val["name"].IsString())
+            name = val["name"].GetString();
           return std::make_unique<Mesh>(val["path"].GetString(),
-                                        readTransform(val), readMaterial(val));
+                                        readTransform(val), readMaterial(val),
+                                        name);
         },
         [](Writer &w, const Object *obj) {
           const Mesh *m = static_cast<const Mesh *>(obj);
@@ -147,12 +156,14 @@ static const std::unordered_map<std::string, ObjectIO> &registry() {
           writeMaterial(w, m->material_);
           w.Key("path");
           w.String(m->path_.c_str());
+          w.Key("name");
+          w.String(m->name_.c_str());
         }}},
   };
   return r;
 }
 
-bool Scene::loadFromFile(std::string &filePath, bool saveLast) {
+bool Scene::loadFromFile(const std::string &filePath, bool saveLast) {
   std::ifstream file(filePath);
   if (!file.is_open())
     return false;
@@ -314,4 +325,4 @@ void Scene::syncMaterials() {
     objects_[i]->materialIdx_ = i;
 }
 
-}
+} // namespace tinytracer::world

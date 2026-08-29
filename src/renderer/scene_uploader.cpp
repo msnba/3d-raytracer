@@ -8,7 +8,7 @@ namespace tinytracer::renderer {
 
 static GPUSphere convertToGPUObject(const tinytracer::world::Sphere &sphere) {
   return GPUSphere{sphere.transform_.position,
-                   sphere.radius_,
+                   sphere.radius(),
                    sphere.material_.color,
                    sphere.material_.smoothness,
                    sphere.material_.emission,

@@ -57,6 +57,40 @@ Window::~Window() {
   glfwTerminate();
 }
 
+Window::Window(Window &&other)
+    : SCR_WIDTH(other.SCR_WIDTH), SCR_HEIGHT(other.SCR_HEIGHT),
+      window(other.window), isFullscreen_(other.isFullscreen_),
+      windowedX_(other.windowedX_), windowedY_(other.windowedY_),
+      windowedWidth_(other.windowedWidth_),
+      windowedHeight_(other.windowedHeight_) {
+  other.window = nullptr;
+}
+
+Window &Window::operator=(Window &&other) {
+  if (this != &other) {
+    glfwDestroyWindow(window);
+
+    window = other.window;
+    SCR_WIDTH = other.SCR_WIDTH;
+    SCR_HEIGHT = other.SCR_HEIGHT;
+    isFullscreen_ = other.isFullscreen_;
+    windowedX_ = other.windowedX_;
+    windowedY_ = other.windowedY_;
+    windowedWidth_ = other.windowedWidth_;
+    windowedHeight_ = other.windowedHeight_;
+
+    other.window = nullptr;
+  }
+  return *this;
+}
+
+std::pair<int, int> Window::getMaximizedSize() {
+  glfwInit();
+  int x, y, w, h;
+  glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), &x, &y, &w, &h);
+  return {w, h};
+}
+
 void Window::toggleFullscreen() {
   if (!isFullscreen_) {
     glfwGetWindowPos(window, &windowedX_, &windowedY_);

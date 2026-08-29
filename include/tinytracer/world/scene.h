@@ -5,9 +5,15 @@
 
 #include "tinytracer/world/object.h"
 
+namespace tinytracer::renderer {
+class SceneUploader;
+}
+
 namespace tinytracer::world {
 
 class Scene {
+  friend class tinytracer::renderer::SceneUploader;
+
 public:
   struct Settings {
     uint32_t maxBounce = 4;
@@ -21,7 +27,7 @@ public:
   Scene(const Scene &) = delete;
   Scene &operator=(const Scene &) = delete;
 
-  bool loadFromFile(std::string &filePath, bool saveLast);
+  bool loadFromFile(const std::string &filePath, bool saveLast);
   bool loadFromSource(const char *source, bool saveLast);
 
   bool saveToFile(const std::string &filepath) const;
@@ -36,6 +42,14 @@ public:
 
     object->materialIdx_ = static_cast<uint32_t>(materials_.size());
     materials_.push_back(&object->material_);
+
+    if (object->name_.empty()) {
+      int count = 0;
+      for (const auto &o : objects_)
+        if (o->typeName() == object->typeName())
+          count++;
+      object->name_ = object->typeName() + " " + std::to_string(count + 1);
+    }
 
     T_ *raw = object.get();
     objects_.push_back(std::move(object));
@@ -61,13 +75,17 @@ public:
   void setSettings(Settings settings) { settings_ = settings; }
   const Settings &settings() const { return settings_; }
 
+  const std::vector<std::unique_ptr<Object>> &objects() const {
+    return objects_;
+  };
+
   size_t objectCount() const { return objects_.size(); }
   size_t materialCount() const { return materials_.size(); }
 
+private:
   std::vector<std::unique_ptr<Object>> objects_;
   std::vector<Object::Material *> materials_; // owned by objects_
 
-private:
   Settings settings_;
   std::string currentFile_ = "";
 };
